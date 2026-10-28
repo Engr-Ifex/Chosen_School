@@ -1,0 +1,39 @@
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+.env.backup
+
+# Backup artifacts must never be committed — they contain personal data
+backups/
+*.age
+*.dump
+*.archive.gz
+mongodump-*
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+coverage/
+
+# Test artifacts
+playwright-report/
+test-results/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# AI assistant working state — not project source
+.workbuddy-ai/

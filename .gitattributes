@@ -1,0 +1,9 @@
+# Normalise line endings to LF in the repository. The deployed runtimes are
+# Linux; keeping CRLF out of the repository avoids diff noise on Windows.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
