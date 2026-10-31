@@ -2,7 +2,7 @@
 
 **Document status:** Living record — baseline approved 24 October 2026
 **Version:** 1.0
-**Last updated:** 24 October 2026
+**Last updated:** 29 October 2026
 
 > One entry per significant decision. A decision is only **Accepted** when the project owner has
 > said so explicitly. Anything I have recommended is **Proposed** and must not be implemented as
@@ -32,8 +32,8 @@
 | ADR-016 | Session cookie strategy | Accepted |
 | ADR-017 | Argon2id password hashing | Accepted |
 | ADR-018 | Server-side sessions in Atlas | Accepted |
-| ADR-019 | Cloudflare R2 for file storage | Accepted |
-| ADR-020 | Cloudflare R2 for backup destination | Accepted |
+| ADR-019 | Cloudflare R2 for file storage | Superseded by ADR-032 |
+| ADR-020 | Cloudflare R2 for backup destination | Superseded by ADR-032 |
 | ADR-021 | PDF generation with `pdfkit` | Accepted |
 | ADR-022 | One `announcements` collection with a `kind` discriminator | Accepted |
 | ADR-023 | Bounded embedded revision history | Accepted |
@@ -45,6 +45,7 @@
 | ADR-029 | Security control baseline (`SECURITY.md` §20) | Accepted |
 | ADR-030 | School information as fixed structured fields (Q13) | Accepted |
 | ADR-031 | Admission form field baseline (D-01, D-02) | Accepted |
+| ADR-032 | Supabase Storage replaces Cloudflare R2 | Accepted |
 
 ---
 
@@ -314,33 +315,34 @@ still check expiry explicitly because the TTL monitor runs only about once a min
 ---
 
 ### ADR-019 — Cloudflare R2 for file storage
-**Status:** Accepted — **selected**. Not yet configured or verified · **Date:** 2026-10-24
+**Status:** **Superseded** (was Accepted 24 Oct 2026) · **Superseded by:** ADR-032, 29 Oct 2026
 
-**Decision.** Cloudflare R2, three buckets: private admission photographs, public gallery images,
-backups. 10 GB free, zero egress.
+**Decision as it stood.** Cloudflare R2, three buckets: private admission photographs, public
+gallery images, backups. 10 GB free, zero egress, bucket-scoped tokens, no inactivity pause.
 
-**Consequences.** Required because Render's disk is ephemeral. Introduces an S3-compatible client
-dependency and a third vendor. Alternatives (Backblaze B2, Supabase Storage, Atlas GridFS) were
-considered and rejected in `ARCHITECTURE.md` §8.4.
+**Why superseded.** The project owner selected Supabase Storage on 29 October 2026. Nothing had
+been provisioned under this decision — no account, bucket or token ever existed — so the change
+costs configuration, not migration.
 
-**Status of the integration.** Selection is settled; nothing is provisioned. No account, bucket,
-token or connection exists. See `INTEGRATIONS.md` I-05 and I-06 — both remain "Awaiting my
-action". The three-bucket design and the separation between the application token and the backup
-token are part of this decision and are not optional.
+**What was given up, recorded so it is not rediscovered as a surprise:** 10 GB instead of 1 GB;
+zero egress instead of 5 GB/month; no inactivity pause instead of a 7-day pause; and tokens that
+could be scoped to a single bucket. The last is the one with a security consequence — see ADR-032
+and D-12.
 
 ---
 
 ### ADR-020 — Cloudflare R2 for the backup destination
-**Status:** Accepted · **Date:** 2026-10-24
+**Status:** **Superseded** (was Accepted 24 Oct 2026) · **Superseded by:** ADR-032, 29 Oct 2026
 
-**Proposal.** Encrypted `mongodump` archives and file archives uploaded to a separate R2 bucket,
-encrypted client-side with a key held offline.
+**Decision as it stood.** Encrypted `mongodump` archives and file archives uploaded to a separate
+R2 bucket, encrypted client-side with a key held offline, using a token scoped to that bucket alone.
 
-**Consequences.** A different vendor from both Atlas and Render, so one provider's outage does not
-take the backups with it. The key must never be stored on Render or in the repository, or the
-encryption protects nothing.
+**Why superseded.** Same provider change as ADR-019.
 
-**Open.** Approval, retention period, and where the key is physically held.
+**What survives.** The requirement survives intact: backups are encrypted before upload, the key is
+held offline, and the application server must not be able to delete them. What does **not** survive
+is the mechanism — a Supabase service-role key cannot be scoped to one bucket, so the separation
+must be achieved with a second project (D-12) rather than by token scope.
 
 ---
 
@@ -470,7 +472,7 @@ decisions already accepted; a number were new.
 3. Unknown request keys stripped, not merged.
 4. Boot-time configuration validation; refuse to start on a missing or malformed required value.
 5. Startup logs variable **names**, never values.
-6. MFA on Vercel, Render, Cloudflare, Atlas and GitHub accounts.
+6. MFA on Vercel, Render, Supabase, Atlas and GitHub accounts.
 7. Lockfile committed and `npm ci` used in builds; dependencies reviewed before being added.
 8. Public source maps disabled in production.
 9. Explicit security header set, including a Content-Security-Policy.
@@ -553,14 +555,57 @@ layout.
 
 ---
 
+## Accepted 29 October 2026 — infrastructure change
+
+### ADR-032 — Supabase Storage replaces Cloudflare R2
+**Status:** Accepted · **Date:** 2026-10-29 · **Owner decision**
+
+**Context.** The project owner selected Supabase Storage as the file-storage provider, replacing
+Cloudflare R2 completely. R2 had been selected but never provisioned.
+
+**Decision.**
+
+1. **File storage:** Supabase Storage. Two buckets in the application project —
+   `admissions-private` (private) and `gallery-public` (public read).
+2. **Upload middleware:** Multer, unchanged.
+3. **MongoDB Atlas remains the application database.** Supabase Database, Supabase Auth and
+   RLS-based authorization are **explicitly not adopted**. Supabase holds files and nothing else.
+4. **Private files** are streamed through the authenticated API using the service-role key. No
+   signed URL is issued for an admission photograph.
+5. **Backups** are encrypted archives uploaded to a `backups` bucket in a **second project**
+   (D-12), so the application key cannot reach them.
+
+**Consequences — the parts that are not a rename:**
+
+- **Smaller free tier.** 1 GB instead of 10 GB; 5 GB monthly egress instead of zero; 50 MB per
+  file; **the project pauses after 7 days idle**; **no backups on the free plan**.
+- **The 7-day pause is a new operational risk.** R2 never paused. A quiet week now breaks uploads
+  and gallery images until someone resumes the project.
+- **The service-role key cannot be scoped.** It bypasses row-level security for the whole project.
+  Bucket-level credential separation is therefore impossible, and project-level separation (D-12)
+  replaces it.
+- **A public bucket serves every object in it.** The approved "an uploaded image is not public
+  until published" control cannot be implemented with a database flag alone (D-13).
+- **Signed URLs cannot be revoked individually**, which reinforces the existing decision not to
+  use them for admission photographs.
+- **Supabase becomes a data processor** under NDPA s.29, joining the processor-terms requirement
+  (L-06) and the cross-border transfer question (L-05).
+
+**Supersedes:** ADR-019, ADR-020.
+
+**Still open:** D-12 (backup project), D-13 (gallery publication control), and whether the Supabase
+free tier is acceptable for Stage 2.
+
+---
+
 ## Open — not yet decided
 
 **Resolved by the 24 October 2026 approval** (recorded so they are not reopened without reason):
 
 | # | Item | Now |
 |---|---|---|
-| Q4 | Photo storage provider | Cloudflare R2 (ADR-019) |
-| Q5 | Backup destination | Cloudflare R2, encrypted, separate bucket (ADR-020) |
+| Q4 | Photo storage provider | **Supabase Storage** (ADR-032, superseding ADR-019) |
+| Q5 | Backup destination | Supabase Storage backup project (ADR-032), subject to **D-12** |
 | Q8 | Backup retention | 30 daily + 12 monthly, subject to Q7 |
 | Q9 | PDF approach | `pdfkit`, server-side (ADR-021) |
 | Q10 | Dashboard count definitions | As specified in `API_SPEC.md` §4.1 |
@@ -584,6 +629,8 @@ or decisions the school must make. None can be closed by approving a document.
 | Q7 | Retention and permanent-deletion policy | School policy decision |
 | Q12 | Event time-of-day | Date-only is the approved interim model; adding a time is a product change |
 | Q15 | Testimonial name display | School preference |
+| **D-12** | Backup destination: second Supabase project, or a third bucket in the application project | Decides whether a compromised API can delete the backups of the data it just corrupted |
+| **D-13** | Gallery publication control | A public bucket serves every object in it, so "not public until published" needs the stage-then-publish design or must be weakened |
 
 **Note on Q13.** Resolved by ADR-030. FR-003 is satisfied by a fixed set of named sections per
 page, editable in the dashboard but not addable, removable or reorderable. `settings` continues to

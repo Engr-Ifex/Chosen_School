@@ -1,8 +1,8 @@
 # Chosen School Website — Security and Data Protection
 
 **Document status:** Approved
-**Version:** 1.0
-**Date:** 24 October 2026
+**Version:** 1.1
+**Date:** 24 October 2026 · **Revised:** 29 October 2026 — storage provider change (ADR-032)
 **Approved by:** project owner, 24 October 2026
 **Baseline:** `PRD.md`, `ARCHITECTURE.md`, `DATA_MODEL.md`, `API_SPEC.md`, `INTEGRATIONS.md`, `DECISIONS.md`
 **Companion:** `THREAT_MODEL.md`
@@ -46,7 +46,10 @@ not a control.
 ## 3. Principles
 
 - **Least privilege.** Every credential can do only what its job requires. The database user is
-  not an admin. The storage token is scoped to two buckets. The backup token is scoped to one.
+  not an admin. The storage credential is the exception, and is called out rather than glossed
+  over: a Supabase service-role key cannot be scoped, so it holds project-wide power. Least
+  privilege is therefore enforced by **project boundary** for backups, and by keeping the key off
+  the client entirely.
 - **Deny by default.** Administrative routes are protected by middleware applied to the whole
   router, not route by route, because one forgotten decorator is invisible in review.
 - **Minimise what is collected.** Only fields the school has approved. Optional fields stay
@@ -64,12 +67,12 @@ not a control.
 
 | Class | Data | Who may read | Where |
 |---|---|---|---|
-| **Critical** | Admission applications: student name, date of birth, gender, religion, ethnicity, state of origin, previous school, health information, photograph | Administrator only | Atlas, R2 private bucket |
+| **Critical** | Admission applications: student name, date of birth, gender, religion, ethnicity, state of origin, previous school, health information, photograph | Administrator only | Atlas, Supabase `admissions-private` |
 | **Critical** | Parent/guardian name, home address, phone, email, occupation, office address | Administrator only | Atlas |
 | **Critical** | Administrator password hash, session tokens | Nobody, in readable form | Atlas |
 | **Moderate** | Enquiries and visit requests: contact details and message | Administrator only | Atlas |
 | **Moderate** | Pending and rejected testimonials, audit records | Administrator only | Atlas |
-| **Public** | Published announcements and events, public gallery images, published FAQs, approved testimonials, school contact details | Anyone | Atlas, R2 public bucket |
+| **Public** | Published announcements and events, public gallery images, published FAQs, approved testimonials, school contact details | Anyone | Atlas, Supabase `gallery-public` |
 
 **Health information is the highest-risk field in the system.** It is optional, sensitive under
 NDPA s.30, never appears in a list view, never appears in a log, and — per ADR-026 — is excluded
@@ -88,8 +91,8 @@ should be part of the DPIA (§13.2), not assumed.
 | Browser → Vercel | Public internet | TLS; static assets only; no secrets in the bundle |
 | Browser → Vercel `/api/*` → Render | Vercel rewrite proxy | TLS on both hops; the browser never learns the Render hostname |
 | Render → Atlas | Provider network | TLS required; SCRAM auth; scoped database user |
-| Render → R2 | Provider network | TLS; token scoped to two buckets |
-| Developer machine → Atlas / R2 backup | Home network | TLS; read-only database user; separate backup token |
+| Render → Supabase | Provider network | TLS; service-role key, project-wide and unscopable |
+| Developer machine → Atlas / Supabase backup project | Home network | TLS; read-only database user; key belonging to the backup project |
 | Administrator → dashboard | Public internet | Session cookie; origin and CSRF checks; rate limiting |
 
 The boundary that matters most is **the browser**. Everything the browser holds is public, so
@@ -231,12 +234,18 @@ only by the administrator, and both are covered by threat T-09.
 | Generated UUID storage keys; the original filename is discarded | [APPROVED] |
 | Private and public images in **separate buckets**, not separate prefixes | [APPROVED] |
 | Private photos streamed only through an authenticated endpoint | [APPROVED] |
-| No presigned URLs for private photos | [APPROVED] |
+| No signed URLs for private photos | [APPROVED] |
 | No code path promotes a private photo to public | [APPROVED] |
 
-**Why not presigned URLs for private photos:** a presigned URL is a bearer credential. It lands
-in browser history, in `Referer` headers, and in any proxy log. Streaming through an authorised
+**Why no signed URLs for private photos.** A signed URL is a bearer credential. It lands in
+browser history, in `Referer` headers, and in any proxy log. Streaming through an authorised
 endpoint means the access decision is made on every request, by code that can be reviewed.
+
+Supabase makes this control more important, not less: **a signed URL cannot be revoked
+individually.** Supabase signs with a dedicated internal key, so revoking an Auth key does not
+invalidate existing signed URLs, and the only remedies are deleting the object or asking Supabase
+to rotate the key for the whole project. A leaked admission-photo link would stay live until it
+expired, with no way to pull it back.
 
 **Re-encoding is the strongest single control here.** It is not only about metadata: decoding and
 re-encoding an image destroys polyglot payloads that survive a naive extension check.
@@ -252,7 +261,7 @@ re-encoding an image destroys polyglot payloads that survive a naive extension c
 | No secret uses the `VITE_` prefix | [APPROVED] |
 | Boot-time validation refuses to start on a missing or malformed required variable | [APPROVED] |
 | Startup logs variable **names**, never values | [APPROVED] |
-| MFA on Vercel, Render, Cloudflare, Atlas and GitHub accounts | [APPROVED] [STAGE-2] |
+| MFA on Vercel, Render, Supabase, Atlas and GitHub accounts | [APPROVED] [STAGE-2] |
 | Credentials rotated on any suspected exposure | [APPROVED] |
 
 ### 11.1 Credential separation — the rule that protects the backups
@@ -261,8 +270,8 @@ re-encoding an image destroys polyglot payloads that survive a naive extension c
 |---|---|---|
 | Atlas application user | `readWrite` on `chosen_school` only | Render env |
 | Atlas backup user | Read-only on `chosen_school` | Developer machine |
-| R2 application token | `admissions-private` + `gallery-public` | Render env |
-| R2 backup token | `backups` only | Developer machine |
+| Supabase service-role key (app project) | **Every bucket in the project** — cannot be scoped | Render env |
+| Supabase service-role key (backup project) | Every bucket in the backup project | Developer machine |
 | `age` private key | Decrypts backups | Offline only |
 
 **The application server must not hold the backup token.** If it did, an attacker who compromised
@@ -313,11 +322,11 @@ Read directly from the **Nigeria Data Protection Act 2023** (47 pages, retrieved
 | Provision | Requirement | Consequence for this project |
 |---|---|---|
 | **s.28** | Where processing is likely to result in **high risk** to rights and freedoms, a **Data Privacy Impact Assessment must be carried out before processing**; if residual risk remains high, the Commission must be consulted before processing | Children's data, health information and photographs together make high risk the default assumption. **A DPIA is required before Stage 2** |
-| **s.29(1)–(2)** | The controller must ensure a processor complies with the Act, assists with data-subject rights, and implements appropriate technical and organisational measures. **The measures include a written agreement between controller and processor** | Vercel, Render, Cloudflare and MongoDB are processors. **Written processor terms are required**, and the school must satisfy itself that each is adequate |
+| **s.29(1)–(2)** | The controller must ensure a processor complies with the Act, assists with data-subject rights, and implements appropriate technical and organisational measures. **The measures include a written agreement between controller and processor** | Vercel, Render, Supabase and MongoDB are processors. **Written processor terms are required**, and the school must satisfy itself that each is adequate |
 | **s.30** | **Sensitive personal data** may only be processed on listed grounds — consent being the first | Health information is sensitive. Religion, ethnicity and state of origin may also be. Their necessity must be justified in the DPIA, not assumed |
 | **s.31(1)** | Where the data subject is a **child** or lacks legal capacity, the controller **shall obtain the consent of the parent or legal guardian** | The admission form must record guardian consent, not merely a typed name |
 | **s.31(2)–(3)** | The controller **shall apply appropriate mechanisms to verify age and consent**, taking available technology into account; government-issued ID is named as an appropriate mechanism | A consent checkbox alone is **not** obviously sufficient. The verification mechanism is an open product decision (§13.3) |
-| **Part VIII** | Cross-border transfers of personal data are governed separately | **Every component is hosted outside Nigeria** — Vercel, Render, Atlas and Cloudflare. The transfer basis must be established, not assumed |
+| **Part VIII** | Cross-border transfers of personal data are governed separately | **Every component is hosted outside Nigeria** — Vercel, Render, Atlas and Supabase. The transfer basis must be established, not assumed |
 | **Breach notification** | Breach notification duties apply, with the Commission empowered to require notification to affected data subjects | A breach runbook is required before Stage 2. The NDPC's GAID sets a **72-hour** notification window per secondary sources — **confirm in the GAID text** |
 
 ### 13.2 Registration — likely required
@@ -344,7 +353,7 @@ party that registers.
 | L-03 | Lawful basis for processing each field — consent, or another ground | School, with counsel |
 | L-04 | How age and consent are verified under s.31(2)–(3): guardian attestation, ID upload, or another mechanism | School, with counsel |
 | L-05 | Cross-border transfer basis for US/EU-hosted infrastructure | School, with counsel |
-| L-06 | Written processor terms with Vercel, Render, Cloudflare, MongoDB | School, with counsel |
+| L-06 | Written processor terms with Vercel, Render, Supabase, MongoDB | School, with counsel |
 | L-07 | Retention periods and permanent-deletion policy | School |
 | L-08 | Privacy notice and consent wording | School, with counsel |
 | L-09 | Whether religion, ethnicity and state of origin are necessary at all | School |
@@ -413,16 +422,33 @@ the reverse. The two are separate reviews and both are needed before Stage 2.
 - **Mongoose `find()` returns whole documents.** Every list endpoint must use an explicit
   projection, or a newly added sensitive field is exposed by default.
 
-### 14.4 Cloudflare R2
+### 14.4 Supabase Storage
 
-- **Private bucket must have no public URL.** Not a signed URL, not a `r2.dev` subdomain — no
-  public access configuration at all.
+- **The private bucket must have no public URL.** No `getPublicUrl` call against it, no public
+  path, no policy that grants anonymous read. Only the authenticated GET and the service-role key
+  reach it.
 - **Separate buckets, not prefixes.** A prefix is a naming convention; a bucket is an access
-  boundary. The application token cannot reach the backup bucket.
-- **Public bucket is world-readable by design.** Anything placed there is public permanently.
-  This is why publication is a separate, explicit administrator action.
-- **No egress fees** removes a denial-of-service cost vector — a large download cannot run up a
-  bill — which is a genuine security benefit of this choice.
+  boundary — though see the next point, which is the important one.
+- **The service-role key is not scoped to anything.** It bypasses row-level security for the whole
+  project. Unlike the bucket-scoped token it replaces, one leaked key exposes every object in both
+  application buckets. This is why the key is backend-only, why it is never logged, and why the
+  backup project must be a **separate project** (D-12).
+- **Signed URLs are bearer credentials that cannot be revoked individually.** Supabase's own
+  documentation states that the only ways to invalidate one are to delete, move or rename the
+  object, or to ask Supabase to rotate a project-wide internal signing key. A leaked admission-photo
+  URL stays valid until it expires, whatever else is done. This is why admission photographs are
+  streamed through the API instead.
+- **A public bucket serves every object in it.** There is no per-object visibility switch. Until
+  D-13 is decided, an uploaded gallery image is reachable by URL even if the database says it is
+  unpublished. The key is a UUID, so the URL is not guessable — but "not guessable" is not
+  "not published".
+- **Egress is metered, unlike the previous provider.** 5 GB per month on the free plan. Private
+  photographs pass through the API, so each view is counted by Supabase *and* by Render. A
+  deliberate or accidental download loop is now a cost and availability vector, not just a
+  performance one.
+- **The project pauses after seven days idle.** When it does, uploads fail and gallery images stop
+  loading. Availability is a security property here: a parent who cannot submit an application at
+  the deadline has been failed by an infrastructure choice, not by an attacker.
 
 ### 14.5 Vercel rewrite proxy and Render cold start
 
@@ -453,7 +479,7 @@ the reverse. The two are separate reviews and both are needed before Stage 2.
 | Typosquatting | Add dependencies by exact name from official docs, never from a search result | [APPROVED] |
 | Post-install scripts | Disable install scripts where feasible; review any package that requires them | [APPROVED] |
 | Stale dependencies | `npm audit` on a schedule; not on every build, to avoid breaking on a non-exploitable advisory | [APPROVED] |
-| Provider supply chain | Out of our control. Accepted for Vercel, Render, Atlas, Cloudflare | Accepted risk |
+| Provider supply chain | Out of our control. Accepted for Vercel, Render, Atlas, Supabase | Accepted risk |
 | Native build failure (Argon2, sharp) | Pin versions; verify the Render build succeeds before relying on it | [VERIFY] |
 
 The dependency surface should stay small. Every package is code that runs with the application's
@@ -471,7 +497,7 @@ These are designs, not facts. Each needs a real test on the real deployment.
 | A-02 | The proxy survives a ~60 s cold start, or fails visibly | Requests may hang or return ambiguous errors |
 | A-03 | Client IP survives the proxy chain | Rate limiting is ineffective or forgeable |
 | A-04 | `Set-Cookie` is forwarded through the rewrite | Login silently does not persist |
-| A-05 | The private R2 bucket is genuinely unreachable publicly | Photographs of children are exposed |
+| A-05 | The Supabase private bucket is genuinely unreachable publicly | Photographs of children are exposed |
 | A-06 | `sharp` and Argon2 native builds succeed on Render | Uploads or login fail in production only |
 | A-07 | Atlas accepts the connection from Render's dynamic egress | The API cannot reach its database |
 | A-08 | A restore from backup actually reconstructs a working system | The recovery plan is fiction |
@@ -514,7 +540,8 @@ All of Stage 1, plus the SG-01 to SG-12 gates in `PRD.md` §4.4, plus:
 |---|---|---|
 | S2-01 | DPIA completed before processing (NDPA s.28) | School + counsel |
 | S2-02 | NDPC registration current (GAID OHL tier) | School |
-| S2-03 | Written processor terms with all four providers (s.29) | School + counsel |
+| S2-03 | Written processor terms with all four providers — Vercel, Render, Supabase, MongoDB (s.29) | School + counsel |
+| S2-03a | Supabase Storage free-tier limits accepted in writing, or a paid plan adopted | School |
 | S2-04 | Cross-border transfer basis documented (Part VIII) | School + counsel |
 | S2-05 | Consent and age-verification mechanism decided and implemented (s.31) | School + counsel |
 | S2-06 | Retention and deletion policy approved and implemented | School |

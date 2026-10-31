@@ -1,8 +1,8 @@
 # Chosen School Website — Technical Architecture
 
 **Document status:** Approved
-**Version:** 1.0
-**Date:** 24 October 2026
+**Version:** 1.1
+**Date:** 24 October 2026 · **Revised:** 29 October 2026 — file storage changed from Cloudflare R2 to Supabase Storage (ADR-032)
 **Approved by:** project owner, 24 October 2026
 **Product baseline:** Approved `discovery.md`, `PRD.md`, `DESIGN.md` (approved 22 October 2026)
 **Supersedes:** the provisional Oracle Cloud single-VM architecture discussed on 22 October 2026
@@ -59,10 +59,10 @@ Browser
                     │  replica set, 0.5 GB       │
                     └────────────────────────────┘
 
-                    Cloudflare R2 (proposed)
-                     ├── private bucket: admission photos
-                     ├── public bucket: gallery images
-                     └── backup bucket: encrypted dumps
+                    Supabase Storage (selected, not provisioned)
+                     ├── admissions-private  (private, streamed via the API)
+                     ├── gallery-public      (public read)
+                     └── backups             (separate project — D-12)
 ```
 
 The important line is the `rewrite`. It is what makes authentication workable — see §5.
@@ -127,7 +127,7 @@ controllers/   request → service → response mapping
 services/      business rules (admissions, content, trash, export)
 models/        Mongoose schemas and indexes
 middleware/    auth, authorization, rate limit, CSRF/origin, error handler
-lib/           storage (R2), crypto, pdf, logging
+lib/           storage (Supabase), crypto, pdf, logging
 ```
 
 No repository abstraction over Mongoose. It is one database and one ODM; an extra layer
@@ -138,18 +138,29 @@ would be ceremony.
 System of record for all structured data. Also stores the session table, so that session
 revocation is a database write rather than a token expiry wait.
 
-### 4.4 Cloudflare R2 — **[APPROVED]** selected, not yet configured
+### 4.4 Supabase Storage — **[APPROVED]** selected, not yet configured
 
-Selected object storage, with three buckets carrying different access rules:
+Selected object storage, used **strictly for files**. MongoDB Atlas remains the application
+database; Supabase Database is not used and must not be introduced.
 
-- `admissions-private` — no public access, no public URL, read only via the API.
-- `gallery-public` — public read, served through a custom domain or R2 public bucket.
-- `backups` — no public access, encrypted client-side before upload.
+| Bucket | Access | Purpose |
+|---|---|---|
+| `admissions-private` | Private — no public URL | Admission photographs and other approved private admission files |
+| `gallery-public` | Public read | School gallery photographs shown on the public website |
+| `backups` | Private, **separate project** | Encrypted database and file archives (D-12) |
 
-**Status: selected, nothing provisioned.** No account, bucket, token or connection exists. Both
-R2 integrations (I-05, I-06) are "Awaiting my action" in `INTEGRATIONS.md`. The application token
-is scoped to the two application buckets; the backup bucket has a separate token that never
-reaches the server. Alternatives evaluated in §8.4.
+**Status: selected, nothing provisioned.** No project, bucket or key exists. I-05 and I-06 are
+"Awaiting my action" in `INTEGRATIONS.md`.
+
+**How private files are served.** The backend reads the object with its service-role key and
+streams it to the authenticated administrator. The browser never receives a Supabase credential,
+and never receives a durable link to an admission photograph. Signed URLs exist and are documented
+in §8.2, but are **not** used for admission photographs — see the reasoning there, because this
+replaces a control that was already approved.
+
+**The service-role key cannot be scoped to a bucket.** It bypasses row-level security entirely, so
+one key opens every bucket in the project. That is why the backup bucket is proposed to live in a
+second project rather than as a third bucket here (D-12).
 
 ---
 
@@ -211,8 +222,9 @@ Illustrative configuration — **not created yet**:
   headers (`X-Forwarded-For`) must be read deliberately and `trust proxy` configured to match
   the actual hop count. Getting this wrong silently disables brute-force protection.
 - **Set-Cookie forwarding** through the rewrite must be confirmed empirically.
-- **Body size limits** at the proxy must accommodate photo uploads, or uploads must go
-  directly to R2 with a presigned URL instead.
+- **Body size limits** at the proxy must accommodate the 5 MB upload cap. Uploads go **through**
+  the API so that Multer and the content checks always run; sending files straight to Supabase with
+  a signed upload URL would bypass validation, and is therefore not an option.
 
 ### 5.4 If the rewrite does not hold — **stop and escalate**
 
@@ -326,11 +338,32 @@ optional paid subscription. The specific page resolves it:
 primary backup must be a self-managed export (§9). Enabling the Atlas add-on would introduce a
 **paid dependency requiring your explicit approval** — it is not assumed anywhere in this plan.
 
-### 6.4 Cloudflare R2 — **[APPROVED]**
+### 6.4 Supabase Storage — **[VERIFIED 29 Oct 2026]**
 
-10 GB-month storage, 1 M Class A and 10 M Class B operations per month, **zero egress fees**.
-At the expected volume (a few hundred photos per year at ~200 KB) this is far inside the free
-allowance. Verified 22 October 2026.
+| Item | Free-plan figure |
+|---|---|
+| Storage | **1 GB** total across all buckets |
+| Egress | **5 GB + 5 GB cached egress** per month |
+| Max file size | **50 MB** per upload |
+| Active projects | **2** |
+| Inactivity | **Project paused after 1 week with no activity** |
+| Backups | **None.** Automatic backups start on the paid plan |
+
+Three of these are worse than the provider this replaces, and each has a consequence:
+
+1. **1 GB is shared by every bucket.** Admission photos at ~200 KB re-encoded, a gallery of ~100
+   images, and any backup archives all draw on the same gigabyte. Fine for the demonstration;
+   a capacity to watch, not a limit to ignore.
+2. **The project pauses after seven days idle.** This is the most consequential change. A school
+   site can plausibly go a week without a visitor during holidays, and when the project pauses,
+   **public gallery images stop loading and uploads fail** — including for a parent mid-form.
+   Atlas pauses at 30 days and R2 did not pause at all. Recovery is manual, from the dashboard.
+   This is recorded as a Stage 1 operational risk in §13.
+3. **No backups on the free plan.** Supabase Storage is therefore not a backup of itself, and §9
+   still requires a self-managed export.
+
+The 50 MB per-file limit is comfortably above the 5 MB cap the application enforces, so it does
+not constrain us.
 
 ---
 
@@ -423,37 +456,88 @@ endpoint. No email service is introduced.
 3. **No code path copies a private object into the public bucket.** Promotion of an admission
    photo to the gallery is not a feature; a gallery image is a separate upload.
 4. **Uploads are validated by content, not by filename or declared MIME type.**
+5. **Supabase holds files only.** No Supabase Database, no Supabase Auth, no row-level-security
+   policies deciding who may read what. Authorization is decided by Express, as everywhere else.
+   RLS is deliberately left out of the design so there is exactly one place where access is
+   decided.
 
-### 8.2 Private admission photographs — **[APPROVED]**
+### 8.2 Upload workflow
 
-Pipeline: `multer` memory storage (5 MB cap) → `file-type` magic-byte check (JPEG, PNG, WebP
-only; SVG rejected as an XSS vector; animated images rejected) → `sharp` re-encode to WebP,
-bounded to 1600 px on the long edge → EXIF/GPS stripped as a consequence of re-encoding →
-write to `admissions-private` under a generated UUID key.
+1. The browser posts `multipart/form-data` to the API.
+2. **Multer** (memory storage, 5 MB cap) receives it. Nothing touches disk.
+3. The server validates: `file-type` magic-byte check (JPEG, PNG, WebP only; SVG rejected as a
+   script-bearing format; animated images rejected), then `sharp` re-encodes to WebP bounded to
+   1600 px, which also strips EXIF and GPS as a consequence.
+4. The server uploads to the appropriate bucket with `@supabase/supabase-js`, using the
+   service-role key. The bucket is chosen from the file's purpose, never from client input.
+5. MongoDB stores the object key and metadata. The key is a generated UUID; the original filename
+   is discarded.
+6. Private files are served only after the API authorises the request.
 
-Access: `GET /api/v1/admin/applications/:id/photo`, authenticated, streams the object through
-Express. Response headers: `Cache-Control: private, no-store`,
-`X-Content-Type-Options: nosniff`, `Content-Disposition: inline`.
+Failure and orphan handling is specified in `INTEGRATIONS.md` §5.5. In short: upload first, then
+write the record; if the record write fails, delete the object. The recoverable failure is the one
+that happens.
 
-Deliberately **not** presigned URLs: a presigned URL is a bearer credential that lands in
-browser history, logs, and referrer headers. Streaming through an authorised endpoint keeps
-the access decision on every request.
+### 8.3 Private admission files
 
-### 8.3 Public gallery images — **[APPROVED]**
+Bucket `admissions-private`. No public URL exists for it.
 
-Separate `gallery-public` bucket. An uploaded image is **not public on upload**. It becomes
-public only when an administrator sets visibility, which is a separate state change recorded
-in the database. The bucket is public-read; the object key is unguessable.
+Access: `GET /api/v1/admin/applications/:id/photo`, authenticated. The backend reads the object
+with the service-role key and streams the bytes to the response. Headers:
+`Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`,
+`Content-Disposition: inline`.
 
-### 8.4 Alternatives considered
+**Signed URLs — available, and deliberately not used here.** A Supabase private object is reachable
+either by a signed URL or by an authenticated GET. A signed URL is a bearer credential:
+
+- it works for anyone who holds it until it expires;
+- **it cannot be revoked individually** — Supabase's own documentation says the only ways to
+  invalidate one are to delete, move or rename the object, or to ask Supabase to rotate an internal
+  signing key for the whole project;
+- it lands in browser history, proxy logs and `Referer` headers.
+
+Streaming through the authorised endpoint keeps the access decision on every request, and
+preserves a control that was already approved. If a signed URL is ever wanted — for example a
+time-limited download link — that is a new decision, with an explicit expiry and a written
+acceptance of the revocation limitation.
+
+### 8.4 Public gallery images — and a control that has to change
+
+Bucket `gallery-public` is publicly readable. Its objects are served at:
+
+```
+https://<project-ref>.supabase.co/storage/v1/object/public/gallery-public/<key>
+```
+
+**The consequence, stated plainly:** in a public bucket, *every* object is publicly fetchable the
+moment it is uploaded. There is no per-object switch. The approved design said "an uploaded image
+is not public until an administrator publishes it" — **that control cannot be implemented by a
+database flag alone when the bucket is public.** Setting `isPublic: false` hides the image from the
+site's listings, but anyone with the URL can still fetch it.
+
+Two ways to resolve this, and it needs your decision (**D-13**):
+
+| Option | How it works | Trade-off |
+|---|---|---|
+| **A — stage then publish** *(recommended)* | Upload new gallery images to the **private** bucket under a `staging/` prefix. On publish, copy the object into `gallery-public` and record the published key. On unpublish, delete the public copy | Preserves the approved control exactly. Costs one copy operation and two keys per image |
+| **B — upload is publication** | Upload straight to `gallery-public`; unpublishing deletes the object | Simpler, but an uploaded-but-unpublished image is still reachable by anyone who has the URL. Weakens an approved control |
+
+Either way, the object key stays a generated UUID, so URLs are not guessable. But "not guessable"
+is not the same as "not published", and the difference matters when the image is a photograph of a
+child.
+
+### 8.5 Alternatives considered
 
 | Option | Assessment |
 |---|---|
-| Cloudflare R2 | 10 GB free, zero egress, S3-compatible. **Preferred** |
+| **Supabase Storage** | **Selected** (ADR-032). 1 GB, 5 GB egress, project pauses after 7 days idle, no backups on free |
+| Cloudflare R2 | The previous selection, superseded. 10 GB free, zero egress, no inactivity pause, bucket-scoped tokens |
 | Backblaze B2 | 10 GB free, but egress is metered and free egress is limited |
-| Supabase Storage | 1 GB free; coupled to a project that pauses after 7 days |
 | Render disk | Not available on free tier. Excluded |
 | Atlas GridFS | Would consume the 0.5 GB database budget. Excluded |
+
+The R2 row is retained deliberately: it is the only way to see what was given up, and a future
+review should be able to compare rather than re-derive.
 
 ---
 
@@ -464,25 +548,29 @@ in the database. The bucket is public-read; the object key is unguessable.
 - **Atlas Free:** no usable backup. The paid add-on is a preview, costs up to $3/month, needs a
   card, and retains only four daily snapshots (§6.3).
 - **Render:** nothing. The instance is disposable by design.
-- **R2:** durable object storage, but it is only a destination — it does not back anything up
-  by itself.
+- **Supabase Storage:** **no backups on the free plan** — automatic backups begin on the paid plan.
+  It is a destination, not a backup, and it cannot be a backup of itself.
 
 **Therefore the backup strategy is entirely self-managed. This is a real operational
 obligation, not a formality.**
 
-### 9.2 Proposed design — **[APPROVED]**
+### 9.2 Design — **[APPROVED, pending D-12]**
 
 **Database.** Nightly `mongodump --gzip --archive` against Atlas, run from a machine you
 control (not from Render, whose disk is ephemeral and whose egress is metered). Atlas Free does
 not support `--oplog`, `--oplogReplay`, or `--preserveUUID`; the dump must not use them.
 
-**Files.** Nightly sync of both buckets to a local copy, then a single archive.
+**Files.** Nightly download of both buckets to a local copy, then a single archive. Both
+`admissions-private` and `gallery-public` are included — a gallery image is still school data,
+and a private photograph is the thing that must never be lost.
 
-**Encryption.** `age` (or GPG) with a key held **offline** — in a password manager and on
-paper — and never on Render, never in the repository, never in the same R2 account that holds
-the ciphertext. Encrypt before upload, so R2 only ever stores ciphertext.
+**Encryption.** `age` with a key held **offline** — in a password manager and on paper — never on
+Render, never in the repository, and never in the same project that holds the ciphertext. Encrypt
+before upload, so the backup project only ever stores ciphertext.
 
-**Destination.** `backups` bucket on R2, a different vendor from both Atlas and Render.
+**Destination.** A `backups` bucket in a **second Supabase project** — proposed, **D-12**. The
+reasoning is in §9.3; it is the one place where the new provider cannot reproduce the old
+provider's guarantees.
 
 **Frequency.** Daily, plus a manual run before any schema migration and during peak admission
 weeks. Daily is the floor, not the target.
@@ -493,22 +581,49 @@ subject to the same rules as the live record.
 
 **Access.** One person. Key held offline. No automated process holds the decryption key.
 
-### 9.3 Restoration
+### 9.3 Where Supabase cannot reproduce the old guarantee — **D-12**
+
+Under the previous provider, the application held a token **scoped to two buckets**, and the
+backup job held a **separate** token scoped to the backup bucket. A compromised API therefore
+could not touch the backups.
+
+**Supabase cannot do that.** A `service_role` key is project-wide and bypasses row-level security
+entirely; it cannot be scoped to a bucket, a prefix, or an operation. If backups lived in the
+application's project, the application's own key could delete every backup of the data it had just
+corrupted — the exact failure the previous design prevented.
+
+Two options:
+
+| Option | Effect |
+|---|---|
+| **A — separate backup project** *(recommended)* | The free plan allows two active projects. A second project has its own URL and its own key, which the application never holds. Restores the separation. Costs a second 1 GB quota and a second 7-day pause clock |
+| **B — same project, third bucket** | Simpler, but the application key can reach `backups`. Accepts a risk that was previously engineered away |
+
+**Until D-12 is decided, the backup design is not complete.** This is not a detail that can be
+settled during implementation.
+
+### 9.4 Restoration
 
 Documented procedure: provision a replacement Atlas cluster, `mongorestore --gzip --archive`,
-restore the two buckets, redeploy the API with the new connection string, verify record counts
-and a sample of photo checksums.
+re-upload the two buckets to the storage project, redeploy the API with the new connection string,
+verify record counts and a sample of photo checksums.
 
 **A backup is not verified until a restore has been performed and the result checked.** The
 drill restores into a scratch cluster, verifies counts and checksums, then destroys the scratch
 cluster. Before launch, and quarterly afterwards.
 
-### 9.4 Honest limits
+### 9.5 Honest limits
 
 - Up to 24 hours of records can be lost between nightly runs. This is the accepted trade-off
   from `discovery.md`, and it should be stated to the school in plain language before Stage 2.
 - If Atlas pauses after 30 days of inactivity, the API will fail to connect. It does **not**
   lose data, but nothing recovers automatically — a human must resume the cluster.
+- **If the Supabase project pauses after 7 days idle, file uploads and gallery images stop
+  working.** Nothing recovers automatically; a human must resume the project from the dashboard.
+  This is the shortest fuse in the system.
+- **1 GB is shared** by admission photos, gallery images and any local staging. Backup archives
+  stored in the same project would compete with the live data for that gigabyte — a further reason
+  for D-12.
 - If Render restarts or spins down mid-request, that request is lost. Writes must be atomic at
   the document level so a partial write cannot occur.
 
@@ -523,22 +638,23 @@ rotation procedure — is **`ENVIRONMENT_VARIABLES.md`**. This section records o
 
 | Context | Consumed by | Contains |
 |---|---|---|
-| Server | Render environment | Database URI, R2 application credentials, origin and proxy settings |
+| Server | Render environment | Database URI, Supabase URL and service-role key, bucket names, origin and proxy settings |
 | Client | Vercel build | `VITE_API_BASE_URL` only — public, bundled into the browser |
-| Backup job | Developer machine, `.env.backup` | Database read credentials, a **separate** R2 token, and the `age` key path |
+| Backup job | Developer machine, `.env.backup` | Database read credentials, the **backup project's** URL and key, and the `age` key path |
 
 No credential, connection string, or provider URL appears in source. `.env` is git-ignored;
 `.env.example` documents the keys with placeholder values only.
 
-**The application token is scoped to the two application buckets.** The backup bucket has its own
-token, which is never present on Render — otherwise a compromised API could delete the backups of
-the data it had just corrupted.
+**The service-role key cannot be scoped.** Unlike the token it replaces, a Supabase `service_role`
+key grants unrestricted access to every bucket in its project. Separation is therefore achieved by
+**project boundary**, not by token scope — which is precisely what D-12 is about.
 
 ### 10.2 Handling
 
 Render environment variables are set in the dashboard, are visible to anyone with project
-access, and are injected at runtime. Rotating a secret means redeploying. The R2 application keys
-should be scoped to the two application buckets and nothing else.
+access, and are injected at runtime. Rotating a secret means redeploying. Anyone with access to
+the Render dashboard can read the service-role key, so dashboard access is equivalent to holding
+every file the school has uploaded.
 
 ### 10.3 Logging
 
@@ -592,6 +708,10 @@ Required before real applications are accepted:
 2. **Atlas tier decision.** Free is documented by MongoDB as not for production and carries no
    SLA. Either accept that in writing with the school, or move to a paid tier. This is the
    most likely reason the "fully free" constraint fails.
+2a. **Supabase Storage tier decision.** The free plan has **no backups**, **1 GB** of storage and
+   **pauses after seven days idle**. For real admission files, the school must either accept those
+   limits in writing or the project moves to a paid plan. A paused project on the day a parent
+   applies is a failed application.
 3. **Backup and restore proven**, with a completed drill and a written runbook.
 4. **Retention and deletion policy approved** by the school (open in the PRD).
 5. **Privacy notice and consent wording approved**, including for children's data.
@@ -617,6 +737,14 @@ Required before real applications are accepted:
 8. **Broad Atlas allowlist** because Render's egress IPs are not static.
 9. **Deployed-domain cookie behaviour is untested.** Until T1 passes, admin authentication is a
    design, not a fact.
+10. **Storage pauses after 7 days idle.** Shorter than Atlas's 30. When it happens, uploads fail
+    and gallery images disappear until someone resumes the project.
+11. **1 GB of file storage, shared.** Admission photographs, gallery images and any staging share
+    one gigabyte.
+12. **5 GB monthly egress.** Private photographs pass through the API, so they are counted once by
+    Supabase and again by Render. Fine at this scale; not a limit to forget.
+13. **Gallery publication is weaker than designed** unless D-13 is resolved. A public bucket serves
+    every object in it, so an uploaded-but-unpublished image is still reachable by URL.
 
 ---
 
@@ -632,7 +760,7 @@ Verified from the primary text of the Nigeria Data Protection Act 2023:
   high risk. Children's data, health information and photographs together make that the default
   assumption.
 - **s.29** — processor obligations, including a **written agreement** between controller and
-  processor. Vercel, Render, Cloudflare and MongoDB are all processors.
+  processor. Vercel, Render, Supabase and MongoDB are all processors.
 - **s.30** — sensitive personal data may only be processed on listed grounds.
 - **s.31** — parental or guardian consent is required for a child's data, and the controller must
   apply **appropriate mechanisms to verify age and consent**.
@@ -661,8 +789,8 @@ reopened without a reason.
 | Q1 | Is the school website eligible under Vercel Hobby? | **Open** — SG-01, requires Vercel's written answer |
 | Q2 | Does the Vercel→Render rewrite survive a ~60 s cold start? | **Open** — must be measured (TEST_PLAN T2) |
 | Q3 | Is a keep-alive pinger acceptable under Render's terms? | **Open** — unverified; do not rely on it |
-| Q4 | R2 for photo storage? | Resolved — ADR-019 |
-| Q5 | R2 for backup destination? | Resolved — ADR-020 |
+| Q4 | File storage provider? | Resolved — **Supabase Storage** (ADR-032; supersedes ADR-019) |
+| Q5 | Backup destination? | Resolved — Supabase Storage backup project, subject to **D-12** |
 | Q6 | Atlas Free accepted for Stage 2, or upgrade? | **Open** — SG-02, school decision |
 | Q7 | Retention and permanent-deletion policy? | **Open** — school decision |
 | Q8 | Backup retention period? | Resolved — 30 daily + 12 monthly, subject to Q7 |
@@ -708,4 +836,7 @@ All checked 24 October 2026 unless noted.
 - Atlas pause/resume — https://www.mongodb.com/docs/atlas/pause-terminate-cluster/
 - Atlas free cluster backups — https://www.mongodb.com/docs/atlas/backup/cloud-backup/free-cluster-backup/
 - Atlas pricing — https://www.mongodb.com/pricing
-- Cloudflare R2 pricing — https://developers.cloudflare.com/r2/pricing/ (22 October 2026)
+- Supabase Storage docs and pricing — https://supabase.com/docs/guides/storage · https://supabase.com/pricing (29 October 2026)
+- Supabase Storage access control — https://supabase.com/docs/guides/storage/security/access-control (29 October 2026)
+- Supabase Storage signed URLs — https://supabase.com/docs/guides/storage/serving/downloads (29 October 2026)
+- Cloudflare R2 pricing — https://developers.cloudflare.com/r2/pricing/ (22 October 2026; retained as the superseded alternative)

@@ -6,9 +6,9 @@ Instructions for any AI agent working in this repository. Short by design — de
 
 ## 1. Repository state — read this first
 
-**The scaffold exists; product behaviour does not.** ROADMAP slice S00 is complete. There are no
-routes, models or real pages yet — only a skeleton that installs, builds, lints, type-checks and
-tests.
+**The API skeleton exists; the product does not.** ROADMAP slices S00 and S01 are complete: one
+endpoint (`GET /api/v1/health`), configuration validation, the error envelope and request logging.
+There are no models, no admin routes and no real pages yet.
 
 Verified by inspection on 28 October 2026:
 
@@ -27,7 +27,7 @@ Secondary). It will hold children's and parents' personal data, so correctness a
 outrank speed.
 
 React + Vite + TypeScript + Tailwind on Vercel · Express + TypeScript on Render · MongoDB Atlas
-with Mongoose · Cloudflare R2 for private photographs, public gallery images and backups. The
+with Mongoose · Supabase Storage for private photographs, public gallery images and backups. The
 Vercel rewrite makes the API same-origin to the browser, which is what makes the session cookie
 work. Full detail: `docs/ARCHITECTURE.md`.
 
@@ -65,7 +65,7 @@ Verified on **28 October 2026**:
 |---|---|---|
 | Install | `npm install` | 157 packages, 0 vulnerabilities |
 | Development | `npm run dev` (client, `:5173`) · `npm run dev:server` (API) | Client served `HTTP 200` |
-| Tests | `npm test` | 3 tests in 2 files, all passing |
+| Tests | `npm test` | 27 tests in 5 files — 25 pass, 2 skipped (database integration, opt-in) |
 | Lint | `npm run lint` | 0 problems |
 | Type check | `npm run typecheck` | Both workspaces clean |
 | Build | `npm run build` | Client bundle + server `dist/` |
@@ -105,8 +105,9 @@ error. Confirm it on CI or a clean machine before depending on it.
   never security.
 - **No real child, parent or guardian data outside production** — not in development, not in
   tests, not in a screenshot, not in a demo.
-- The application's R2 token cannot reach the backup bucket, and the backup token never exists on
-  the server. Breaking this separation makes backups deletable by the system they protect.
+- A Supabase service-role key **cannot be scoped** — it opens every bucket in its project. Backups
+  therefore live in a **separate project** whose key never reaches the server (D-12). Breaking that
+  separation makes backups deletable by the system they protect.
 - No personal data in logs, URLs, query strings or error messages.
 - Full control set: `docs/SECURITY.md`. Threat analysis: `docs/THREAT_MODEL.md`.
 
@@ -169,7 +170,7 @@ longer exists, and the next agent will believe them.
 ## 12. Integrations, MCP and blocked actions
 
 - **No MCP connector is installed** in this environment, and no official connector exists for
-  Atlas, Vercel, Render or Cloudflare R2 (checked 24 October 2026). Do not claim access you do
+  Atlas, Vercel, Render or Supabase (checked 29 October 2026). Do not claim access you do
   not have.
 - Account creation, billing and dashboard configuration are **owner actions**. Never ask for a
   credential in a message; point to `docs/INTEGRATIONS.md` for where it belongs.

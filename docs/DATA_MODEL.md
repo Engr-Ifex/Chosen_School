@@ -194,7 +194,7 @@ The record makes no claim about legal validity. The UI wording must not either.
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `healthInformation` | String | no | ≤1000 chars. **Sensitive.** Excluded from every list projection |
-| `photo` | Object \| null | no | `{ key, contentType, width, height, bytes, uploadedAt }` |
+| `photo` | Object \| null | no | `{ key, contentType, width, height, bytes, uploadedAt }` — `key` is the object key in Supabase `admissions-private` |
 | `submittedAt` | Date | yes | Server-set at insert |
 | `revisions` | Array | no | See §4.4 |
 | `deletedAt` | Date \| null | no | Set when moved to Trash |
@@ -258,7 +258,7 @@ needs an in-memory sort.
 |---|---|
 | Move to Trash | `deletedAt = now`, `deletedBy = admin`. Record disappears from normal lists; appears in Trash |
 | Restore | `deletedAt = null`. The original `submittedAt` is preserved, so ordering is unaffected |
-| Permanent delete | Document removed, **and** the private photo object removed from R2, **and** an `auditlogs` entry written |
+| Permanent delete | Document removed, **and** the private photo object removed from Supabase Storage, **and** an `auditlogs` entry written |
 
 The order matters: delete the database document last. If the object delete fails, the record is
 still present and the operation can be retried. Deleting the record first would orphan an
@@ -362,7 +362,7 @@ share only an admin screen.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `storageKey` | String | yes | UUID key in the public bucket |
+| `storageKey` | String | yes | UUID key in Supabase `gallery-public` |
 | `contentType` | String | yes | `image/webp` |
 | `width` / `height` | Number | yes | Intrinsic dimensions, prevents layout shift |
 | `bytes` | Number | yes | |
@@ -616,7 +616,7 @@ returning whole documents, so a new sensitive field added later is not exposed b
 | `enquiries` | No — archive only | Not in PRD | **Open** |
 | `visitrequests` | No — archive only | Not in PRD | **Open** |
 | `announcements` | Draft/unpublish | Hard delete | Retained for administrative reference after expiry |
-| `galleryitems` | Yes | Removes the R2 object | **Open** |
+| `galleryitems` | Yes | Removes the Supabase object | **Open** |
 | `faqs` | Yes | Hard delete | n/a |
 | `testimonials` | Reject/unpublish | Hard delete | Rejected: short period, **open** |
 | `sessions` | n/a | Hard delete / TTL | 12h max |

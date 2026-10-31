@@ -2,7 +2,7 @@
 
 **Document status:** Living record
 **Version:** 1.0
-**Last updated:** 24 October 2026
+**Last updated:** 29 October 2026
 **Companion files:** `.env.example` (root), `.gitignore` (root)
 
 > The authoritative register of every configuration value. If a variable is not in this document,
@@ -43,16 +43,15 @@ Consumed by the Express API at runtime.
 | `SESSION_COOKIE_NAME` | Cookie name | No | No (default `__Host-cs_session`) | — | Must start `__Host-` in production |
 | `TRUST_PROXY_HOPS` | How many proxies to trust for client IP | No | Yes | Determined by deployment | Integer 0–5. **Must be verified, not guessed** — see §6 |
 | `LOG_LEVEL` | Logging verbosity | No | No (default `info`) | — | One of `error`, `warn`, `info`, `debug` |
-| `R2_ACCOUNT_ID` | Cloudflare account identifier | No (identifier) | Yes | Cloudflare dashboard | 32 hex characters |
-| `R2_ACCESS_KEY_ID` | R2 token access key | **Yes** | Yes | R2 → Manage API tokens | Non-empty |
-| `R2_SECRET_ACCESS_KEY` | R2 token secret | **Yes** | Yes | Shown once at token creation | Non-empty. Cannot be retrieved later — if lost, rotate |
-| `R2_BUCKET_PRIVATE` | Private photo bucket | No | Yes | Chosen at setup | `admissions-private` |
-| `R2_BUCKET_PUBLIC` | Public gallery bucket | No | Yes | Chosen at setup | `gallery-public` |
-| `R2_PUBLIC_BASE_URL` | Base URL for public gallery images | No | Yes | R2 bucket settings (public domain or custom) | Absolute `https://` URL, no trailing slash |
+| `SUPABASE_URL` | Supabase project URL | No (identifier) | Yes | Supabase dashboard → Project Settings → API | Absolute `https://` URL, no trailing slash, form `https://<ref>.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Storage access key | **Yes** | Yes | Supabase → Project Settings → API → `service_role` | Non-empty. **Bypasses row-level security entirely** — see §9 |
+| `SUPABASE_BUCKET_PRIVATE` | Private admission-file bucket | No | Yes | Chosen at setup | `admissions-private` |
+| `SUPABASE_BUCKET_PUBLIC` | Public gallery bucket | No | Yes | Chosen at setup | `gallery-public` |
 
 **Not needed, and deliberately absent:** `SESSION_SECRET` (sessions are random tokens stored
 hashed — there is nothing to sign), `JWT_SECRET` (no JWTs), `CORS_ORIGIN` (the rewrite makes CORS
-unnecessary), `SMTP_*` (no email service).
+unnecessary), `SMTP_*` (no email service), `SUPABASE_ANON_KEY` (the browser never talks to Supabase
+directly), `SUPABASE_PUBLIC_BASE_URL` (derived from `SUPABASE_URL` and the bucket name — see §8).
 
 ---
 
@@ -76,15 +75,20 @@ Used by the nightly backup job on the developer machine. **None of these may be 
 | Name | Purpose | Secret | Required | Where to obtain | Validation |
 |---|---|---|---|---|---|
 | `BACKUP_MONGODB_URI` | Atlas URI for dumping | **Yes** | Yes | Atlas, ideally a read-only user | As `MONGODB_URI` |
-| `BACKUP_R2_ENDPOINT` | R2 endpoint for the backup bucket | No | Yes | Cloudflare | Absolute `https://` URL |
-| `BACKUP_R2_ACCESS_KEY_ID` | Backup-only token | **Yes** | Yes | Separate R2 token | Non-empty |
-| `BACKUP_R2_SECRET_ACCESS_KEY` | Backup-only secret | **Yes** | Yes | Shown once at creation | Non-empty |
-| `BACKUP_R2_BUCKET` | Backup bucket | No | Yes | Chosen at setup | `backups` |
+| `BACKUP_SUPABASE_URL` | Supabase project URL holding backups | No | Yes | Supabase dashboard | Absolute `https://` URL |
+| `BACKUP_SUPABASE_SERVICE_ROLE_KEY` | Service key for the **backup** project | **Yes** | Yes | Supabase → API → `service_role` | Non-empty. Must belong to a **different project** from the application's key — see §9 |
+| `BACKUP_SUPABASE_BUCKET` | Backup bucket | No | Yes | Chosen at setup | `backups` |
 | `AGE_RECIPIENT` | Public key used to encrypt | No (public key) | Yes | Generated locally | `age1...` |
 | `AGE_IDENTITY_FILE` | **Path** to the private key | Path only | Yes | Offline storage | Must exist and be outside the repository |
 
 Stored in `.env.backup`, which is gitignored. The `age` private key itself is never stored in any
 file inside the project.
+
+**Why `BACKUP_SUPABASE_URL` must point at a different project.** A Supabase `service_role` key is
+project-wide and bypasses row-level security — it cannot be scoped to one bucket. If backups lived
+in the application's own project, the application's key could delete them, which is exactly the
+failure the previous provider separation prevented. The free plan allows two active projects, so a
+separate backup project preserves the separation. This is **D-12**, still awaiting your approval.
 
 ---
 
@@ -96,11 +100,14 @@ file inside the project.
 | `APP_ORIGIN` | `http://localhost:5173` | Preview URL | Production URL |
 | `TRUST_PROXY_HOPS` | `0` | `2` (verify) | `2` (verify) |
 | `VITE_API_BASE_URL` | `/api/v1` (Vite dev proxy) | `/api/v1` | `/api/v1` |
-| R2 variables | Dev bucket or local storage stub | — | Production buckets |
+| Supabase variables | Local storage stub, or a dev bucket in a spare project | — | Application project |
 
 **Local development does not require any provider account.** MongoDB runs locally, and storage is
 accessed through an interface with a local-filesystem implementation. This is what allows
 implementation to proceed before your accounts exist — see `ROADMAP.md`.
+
+**The browser never receives a Supabase variable.** It fetches gallery images from absolute public
+URLs returned by the API, and streams private files through the API. There is no `VITE_SUPABASE_*`.
 
 ---
 
@@ -125,17 +132,52 @@ another. Until T3 passes, rate limiting is unproven.
 | Credential | How to rotate | Afterwards |
 |---|---|---|
 | Atlas user password | Atlas → Database Access → edit user | Update `MONGODB_URI` on Render; redeploy; delete old sessions |
-| R2 application token | R2 → API tokens → roll | Update the three R2 variables; redeploy |
-| R2 backup token | Same, separate token | Update `.env.backup`; run a test backup |
+| Supabase service-role key | Supabase → Project Settings → API → rotate JWT secret | Update `SUPABASE_SERVICE_ROLE_KEY`; redeploy; verify upload and read |
+| Backup project service-role key | Same, in the backup project | Update `.env.backup`; run a test backup |
 | `age` key pair | Generate a new pair | Old backups stay readable with the old key — **keep the old private key** until those archives expire |
 | Admin password | CLI script | Deletes all sessions; audit entry written |
+
+**Rotating the Supabase JWT secret invalidates every key in that project**, including the `anon`
+key. Nothing in this application uses `anon`, but any other tool pointing at the project will
+break. Note also that **signed URLs are not invalidated by a key rotation** — Supabase signs them
+with a separate internal key. See `SECURITY.md` §14.4.
 
 A rotation is not complete until the dependent operation has been re-run successfully. Updating a
 value without proving it works leaves the system broken in a way that only surfaces later.
 
 ---
 
-## 8. Boot-time validation
+## 8. Derived values
+
+These are computed, not configured. Documenting them prevents someone adding a variable that
+should not exist.
+
+| Value | Formula |
+|---|---|
+| Public gallery URL base | `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET_PUBLIC}/` |
+| Public object URL | base + object key |
+
+The API returns absolute URLs built this way, which is why the client needs no Supabase variable.
+
+---
+
+## 9. The service-role key is the most dangerous value in the system
+
+A Supabase `service_role` key **bypasses row-level security entirely** — Supabase's own
+documentation states it grants unrestricted access to all Storage APIs. Consequences:
+
+- It cannot be scoped to a single bucket. One key opens `admissions-private` and `gallery-public`
+  alike.
+- Anyone holding it can read, overwrite or delete every admission photograph.
+- It must never reach the browser, a log, an error message, or a screenshot.
+
+This is why the backup project uses a **separate** project with a separate key (D-12): it is the
+only way to keep the "a compromised API cannot delete the backups" property that the previous
+provider's bucket-scoped tokens provided.
+
+---
+
+## 10. Boot-time validation
 
 The server should check, before accepting traffic:
 
@@ -144,8 +186,20 @@ The server should check, before accepting traffic:
 3. `APP_ORIGIN` is an absolute `https://` URL with no trailing slash.
 4. `TRUST_PROXY_HOPS` is an integer in range.
 5. `SESSION_COOKIE_NAME` starts with `__Host-` when `NODE_ENV=production`.
-6. On startup, **log the names of the variables that are set, never their values** — so a missing
+6. `SUPABASE_URL` is an absolute `https://` URL, and the two bucket names are non-empty and
+   different from each other.
+7. On startup, **log the names of the variables that are set, never their values** — so a missing
    variable is diagnosable without a secret appearing in the logs.
 
 If any check fails, exit non-zero with a message naming the variable and the reason. Do not start
 in a degraded state.
+
+**Validation is staged by slice.** The server validates only the variables it currently uses. As of
+S01 that is `NODE_ENV`, `PORT`, `MONGODB_URI`, `MONGODB_DB_NAME`, `APP_ORIGIN`,
+`SESSION_COOKIE_NAME`, `TRUST_PROXY_HOPS` and `LOG_LEVEL`. The Supabase variables become required at
+S13, when storage is wired in — requiring them earlier would force credentials before anything
+reads them.
+
+**A missing database does not stop the process.** Bad configuration exits; an unreachable database
+is logged and the process keeps serving, so `/health` can report `503` honestly. Reconnection after
+a failed initial connect is not implemented yet (S14).

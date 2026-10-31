@@ -1,8 +1,8 @@
 # Chosen School Website — Threat Model
 
 **Document status:** Approved
-**Version:** 1.0
-**Date:** 24 October 2026
+**Version:** 1.1
+**Date:** 24 October 2026 · **Revised:** 29 October 2026 — storage provider change; T-31 to T-33 added
 **Approved by:** project owner, 24 October 2026
 **Companion:** `SECURITY.md` (controls), `ARCHITECTURE.md` (structure)
 
@@ -21,7 +21,7 @@ control or an explicit acceptance.
 **In scope:** the public site, the administrator dashboard, the API, the database, object storage,
 backups, and the deployment chain.
 
-**Out of scope:** provider-internal compromise (a breach inside Vercel, Render, Cloudflare or
+**Out of scope:** provider-internal compromise (a breach inside Vercel, Render, Supabase or
 MongoDB), the school's own devices, and physical security of the school's premises. These are
 recorded in §8 rather than modelled.
 
@@ -78,15 +78,16 @@ no reason to look at a real child's record during development.
                         │  trusted server  │   (same surface
                         └───┬──────────┬───┘    as any client)
                             │          │
-              ┌─────────────▼──┐   ┌───▼──────────────┐
-              │ Atlas          │   │ R2 app buckets   │
-              │ (data + auth)  │   │ private + public │
-              └────────────────┘   └──────────────────┘
+              ┌─────────────▼──┐   ┌───▼──────────────────┐
+              │ Atlas          │   │ Supabase project A   │
+              │ (data + auth)  │   │ private + public     │
+              └────────────────┘   └──────────────────────┘
                             ▲
                             │ read-only, from developer machine
-              ┌─────────────┴──────┐        ┌──────────────────┐
-              │ Backup job (local) │───────▶│ R2 backups bucket│
-              └────────────────────┘        └──────────────────┘
+              ┌─────────────┴──────┐        ┌──────────────────────┐
+              │ Backup job (local) │───────▶│ Supabase project B   │
+              └────────────────────┘        │ backups (encrypted)  │
+                                            └──────────────────────┘
 ```
 
 **Three boundaries carry all the risk:**
@@ -128,7 +129,7 @@ Likelihood and impact are judgements for this specific system, not generic score
 | T-03 | Session fixation | Spoofing | Low | High | Token generated server-side at login, never accepted from client | Very low | Unit test |
 | T-04 | CSRF on admin mutations | Tampering | Medium | High | `SameSite=Lax` + exact `Origin` check + per-session token | Low | API-A04/05 |
 | T-05 | Accessing an application by guessing its id | Info disclosure | Low | Critical | Object-level check; `404` instead of `403` | Low | API-A01–A06 |
-| T-06 | Private photograph reachable publicly | Info disclosure | Medium | Critical | Separate buckets; no public access config; UUID keys; streamed only via authenticated route | Low | SEC-03 |
+| T-06 | Private photograph reachable publicly | Info disclosure | Medium | Critical | Private bucket has no public URL; UUID keys; streamed only via the authenticated route; no signed URL issued | Low | SEC-03 |
 | T-07 | Malicious upload — polyglot, SVG with script, zip bomb | Elevation | Medium | High | Magic-byte check; decode-and-re-encode; SVG and animation rejected; 5 MB cap | Low | SEC-04 |
 | T-08 | EXIF/GPS in a child's photograph reveals home location | Info disclosure | High if unmitigated | High | Re-encode strips metadata | Very low | F-06 |
 | T-09 | Stored XSS via announcement or page-content body | Elevation | Medium | Critical | Allowlist sanitiser on both surfaces; CSP; admin-only authoring | Low | Unit test |
@@ -136,8 +137,11 @@ Likelihood and impact are judgements for this specific system, not generic score
 | T-11 | Mass assignment of `deletedAt`, `status`, `publishedAt` | Tampering | Medium | Medium | Immutable fields rejected with a validation error | Low | API-A11 |
 | T-12 | Rate-limit bypass via forged `X-Forwarded-For` | Tampering | High | High | Correct `TRUST_PROXY_HOPS`; verified, not guessed | **Medium** | SEC-02 |
 | T-13 | Account enumeration via differing errors or timing | Info disclosure | Medium | Low | Single generic error for every failure path | Low | API test |
-| T-14 | Backup archive stolen and read | Info disclosure | Medium | Critical | Encrypted before upload; key held offline | Low | Drill |
-| T-15 | Compromised API deletes the backups | Destruction | Medium | Critical | Backup token not present on the server | Low | Env review |
+| T-14 | Backup archive stolen and read | Info disclosure | Medium | Critical | Encrypted with `age` before upload; key held offline; stored in a separate project | Low | Drill |
+| T-15 | Compromised API deletes the backups | Destruction | Medium | Critical | Backup project key never present on the server — project separation, since a Supabase key cannot be bucket-scoped (D-12) | **Medium** | Env review |
+| T-31 | Supabase project pauses after 7 days idle; uploads and gallery images fail | DoS | **High** | High | External uptime monitor on the public gallery and health endpoint; documented manual resume; keep-alive traffic during term time | **Medium** | Monitor |
+| T-32 | Gallery image reachable before it is published | Info disclosure | **High** | High | Public bucket serves every object; needs the stage-then-publish design (D-13) | **Medium** | SEC-03 |
+| T-33 | Leaked service-role key exposes every bucket | Elevation | Low | Critical | Backend-only, never logged, never in `VITE_*`; rotation procedure documented | Medium | Env review |
 | T-16 | Dependency compromise | Elevation | Low | Critical | Lockfile; `npm ci`; minimal dependency surface; review before adding | **Medium** | `npm audit` |
 | T-17 | Secret leaked via a `VITE_` variable or committed `.env` | Info disclosure | Medium | Critical | Prefix discipline; `.gitignore`; scan the built bundle | Low | SEC-06 |
 | T-18 | Personal data written to logs | Info disclosure | High | High | No request-body logging; redaction; truncated IPs | **Medium** | Log review |
@@ -156,18 +160,27 @@ Likelihood and impact are judgements for this specific system, not generic score
 
 ### Residual risks that are accepted, not mitigated
 
-Five residuals are **Medium** and cannot be reduced further within the free-tier constraint.
+Nine residuals are **Medium** and cannot be reduced further within the free-tier constraint.
 They should be accepted in writing, by the school, before Stage 2:
 
 1. **T-12** — rate limiting depends on a proxy configuration that is only provable on the real
    deployment.
-2. **T-16** — supply chain risk exists in any Node project; it is reduced, not eliminated.
-3. **T-18** — logging discipline is a code-review property, not an enforced control.
-4. **T-22** — the developer must have production access to operate the system.
-5. **T-29** — backups inherently retain deleted data until they expire.
+2. **T-15** — the backup separation now depends on a second project existing. If D-12 resolves to
+   "same project", this becomes a High residual, not a Medium one.
+3. **T-16** — supply chain risk exists in any Node project; it is reduced, not eliminated.
+4. **T-18** — logging discipline is a code-review property, not an enforced control.
+5. **T-22** — the developer must have production access to operate the system.
+6. **T-29** — backups inherently retain deleted data until they expire.
+7. **T-31** — a Supabase project pauses after seven days idle. This cannot be engineered away
+   without a paid plan or continuous traffic.
+8. **T-32** — an unpublished gallery image is reachable by URL until D-13 is resolved.
+9. **T-33** — a leaked service-role key is catastrophic and cannot be scoped down.
 
 Add **T-19** and **T-20**: both are direct consequences of free-tier behaviour that cannot be
 engineered away, only monitored and disclosed.
+
+**T-31 and T-32 are new since 29 October 2026.** They did not exist under the previous storage
+provider, which neither paused nor served unpublished objects.
 
 ---
 

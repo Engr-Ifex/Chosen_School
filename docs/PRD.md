@@ -665,8 +665,8 @@ its status.
 | Frontend hosting | Vercel | Chosen. **Eligibility unconfirmed** — SG-01 |
 | Backend/API hosting | Render, free web service | Chosen. Documented by the provider as not for production use |
 | Database | MongoDB Atlas, Free (M0) | Chosen. **Stage 2 tier decision required** — SG-02 |
-| Object storage for photographs and gallery images | Not yet selected (Cloudflare R2 proposed) | Open |
-| Off-site backup destination | Not yet selected (Cloudflare R2 proposed) | Open |
+| Object storage for photographs and gallery images | **Supabase Storage** (ADR-032) | Selected; not provisioned |
+| Off-site backup destination | Supabase Storage backup project (ADR-032) | Selected; **D-12** open |
 | Map | Simple map link | Chosen; requires the school's confirmed location |
 | YouTube | Administrator-provided links only | Chosen; no uploads, no embedded player until requested |
 | WhatsApp | Manual sharing via link | Chosen; the site never sends a message |

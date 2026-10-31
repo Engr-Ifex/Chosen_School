@@ -3,7 +3,7 @@
 **Document status:** Approved
 **Version:** 2.0
 **Date:** 24 October 2026
-**Approved by:** project owner, 24 October 2026
+**Approved by:** project owner, 24 October 2026 · **Revised:** 29 October 2026 (S13/S15 storage provider)
 **Companions:** `PRD.md`, `TEST_PLAN.md`, `INTEGRATIONS.md`, `ENVIRONMENT_VARIABLES.md`, `DECISIONS.md`
 
 > Delivery is cut into small, testable slices. Each slice ends with something that can be
@@ -61,23 +61,23 @@ Every slice states the same eleven things:
 | S10 | Edit with revision history | S06 | No |
 | S11 | PDF export | S06 | No |
 | S12 | Enquiries and visit requests | S06 | No |
-| S13 | Swap storage to Cloudflare R2 | S08, R2 account | Yes |
+| S13 | Swap storage to Supabase Storage | S08, Supabase project | Yes |
 | S14 | Production deployment | S05, S07, S13, all accounts | Yes |
-| S15 | Backups and restore drill | S14, Atlas + R2 | Yes |
+| S15 | Backups and restore drill | S14, Atlas + Supabase backup project | Yes |
 | S16 | Announcements and events | S06 | No |
 | S17 | Gallery | S08, S13 | Partly |
 | S18 | FAQs, testimonials, settings | S06 | No |
 | S19 | School information content | S18 | No |
 | S20 | Accessibility, responsive, Stage 1 gate | S14, **S15**, S16–S19 | Yes |
 
-**Progress:** S00 complete (28 October 2026). **Next slice: S01** — API skeleton, configuration
-validation and the health endpoint.
+**Progress:** S00 (28 Oct) and S01 (31 Oct) complete. **Next slice: S02** — data layer, models and
+synthetic seed. Note that S02 needs a database, and the local `mongod` situation is unresolved.
 
 ---
 
 ## 4. What can proceed while an account is pending
 
-This is the practical answer to "I haven't created the Atlas/Vercel/Render/Cloudflare accounts
+This is the practical answer to "I haven't created the Atlas/Vercel/Render/Supabase accounts
 yet."
 
 **Fully unblocked — no account, no credential, no spend:**
@@ -93,10 +93,10 @@ demonstrable on a laptop.**
 | Blocked slice | Blocked by | Why it cannot be mocked |
 |---|---|---|
 | **S07** | Vercel + Render + Atlas | The cookie/ proxy/ IP behaviour only exists on the real domains |
-| S13 | Cloudflare R2 | The S3 client and bucket policy are what is being tested |
+| S13 | Supabase Storage | The client, the bucket access rules and the 7-day pause are what is being tested |
 | S14 | All four | Nothing to deploy to |
-| S15 | Atlas + R2 | A restore drill against a stub proves the stub works |
-| S17 (real images) | R2 | Local driver covers the behaviour, not the bucket |
+| S15 | Atlas + Supabase backup project | A restore drill against a stub proves the stub works |
+| S17 (real images) | Supabase Storage | Local driver covers the behaviour, not the bucket |
 
 **Blocked on a decision, not an account:** none. Q13 was resolved on 24 October 2026 (ADR-030),
 which unblocked S19.
@@ -168,18 +168,26 @@ confirming on CI or a clean machine. TypeScript is pinned to 6.0.3 because `type
 requires `<6.1.0`; jsdom and Testing Library were deliberately left out until S04 needs them.
 
 ### S01 — API skeleton, configuration, health
+**Status:** Complete — 31 October 2026
 **Outcome** — The API starts, refuses to start on bad configuration, and reports health honestly.
 **Covers** — FR-040.
 **Depends on** — S00.
 **Touches** — `server/src/app.ts`, `config.ts`, `db.ts`, `middleware/error.ts`, `routes/health.ts`.
 **Setup** — Local `mongod` or `mongodb-memory-server`. `NODE_ENV`, `PORT`, `MONGODB_URI`, `LOG_LEVEL`.
-**AI work** — App wiring, error envelope per `API_SPEC.md` §1.4, boot-time validation per `ENVIRONMENT_VARIABLES.md` §8, request logging with redaction.
+**AI work** — App wiring, error envelope per `API_SPEC.md` §1.4, boot-time validation per `ENVIRONMENT_VARIABLES.md` §10, request logging with redaction.
 **Owner action** — None.
 **Approach** — Validate configuration before binding the port; exit non-zero naming the variable. Health returns `ok` or `503` with no internals.
 **Acceptance** — Health `200` with a database, `503` without; a missing variable prevents boot with a message naming it; no host or database name in any response.
 **Verify** — API-P01, API-P02, SEC-07, SEC-09.
 **Risks / rollback** — None material; the app is empty.
 **DoD** — Both health states observed and recorded.
+
+**Completion note (31 Oct 2026).** The `503` path, the boot-time configuration failure and the
+error envelope were observed against a running process. The `200` path is **not** verified on this
+machine: `mongodb-memory-server` could not obtain a `mongod` binary (its download stalled and left
+a corrupt 497 MB partial), so `db.integration.test.ts` is opt-in via `RUN_DB_TESTS=1`. Graceful
+shutdown is implemented but unobserved — Windows `taskkill` does not deliver a POSIX signal.
+Both should be confirmed on CI or Linux before S02 is called done.
 
 ### S02 — Data layer, models, synthetic seed
 **Outcome** — Mongoose models with real validation and indexes, and a seed script of fake records.
@@ -273,7 +281,7 @@ requires `<6.1.0`; jsdom and Testing Library were deliberately left out until S0
 **Setup** — None; local driver writes outside the web root.
 **AI work** — Magic-byte check, 5 MB cap, SVG and animation rejection, `sharp` re-encode to WebP, EXIF strip, UUID keys, authenticated streaming with `no-store`.
 **Owner action** — None.
-**Approach** — The adapter is the point: R2 later implements the same interface, so S13 changes one file.
+**Approach** — The adapter is the point: Supabase later implements the same interface, so S13 changes one file.
 **Acceptance** — Polyglot and SVG rejected; EXIF and GPS absent from output; oversized rejected; unauthenticated access denied; no presigned URL anywhere.
 **Verify** — F-01 to F-09, F-10 (local equivalent).
 **Risks / rollback** — Native `sharp` build failure. Pin the version; if it will not build on the target, that is an S14 blocker to raise, not to work around.
@@ -335,18 +343,18 @@ requires `<6.1.0`; jsdom and Testing Library were deliberately left out until S0
 **Risks / rollback** — Copy implying confirmation. Assert the wording in a test.
 **DoD** — Submit a visit request and confirm the page says it was received, not booked.
 
-### S13 — Swap storage to Cloudflare R2 — ⚠ needs R2
-**Outcome** — Photographs live in R2; the local driver remains for tests.
+### S13 — Swap storage to Supabase Storage — ⚠ needs a Supabase project
+**Outcome** — Files live in Supabase Storage; the local driver remains for tests.
 **Covers** — FR-012, FR-030.
-**Depends on** — S08, R2 account.
-**Touches** — `server/src/lib/storage/r2.ts`, `INTEGRATIONS.md` §7.
-**Setup** — `R2_*` variables; two buckets; scoped token.
-**AI work** — Implement the interface against R2; verify bucket separation; record results.
-**Owner action** — Create the buckets and the **application-scoped** token.
+**Depends on** — S08, a Supabase project (I-05), and **D-13** if gallery publication is to keep its approved control.
+**Touches** — `server/src/lib/storage/supabase.ts`, `INTEGRATIONS.md` §7.
+**Setup** — `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, bucket names; two buckets.
+**AI work** — Implement the interface against `@supabase/supabase-js`; verify private-bucket access; record results.
+**Owner action** — Create the project and the two buckets, set per-bucket size and MIME limits, copy the URL and service-role key.
 **Approach** — Selection by environment, not by branching in business code.
-**Acceptance** — Upload and stream work against R2; private bucket unreachable unauthenticated; the token cannot reach the backup bucket.
+**Acceptance** — Upload and stream work against Supabase; the private bucket is unreachable without auth; the public bucket serves only gallery objects.
 **Verify** — V-03, V-04, F-10 to F-14 against real buckets.
-**Risks / rollback** — A misconfigured public bucket exposes children's photographs. Verify before any real upload.
+**Risks / rollback** — A private bucket configured public exposes children's photographs. Verify before any real upload.
 **DoD** — V-03 and V-04 recorded with actual responses.
 
 ### S14 — Production deployment — ⚠ needs all accounts
@@ -363,7 +371,7 @@ requires `<6.1.0`; jsdom and Testing Library were deliberately left out until S0
 **Risks / rollback** — A failed deploy leaves the previous one live. Never deploy with real data before S15.
 **DoD** — T1 to T5 recorded as passed on the real domains.
 
-### S15 — Backups and restore drill — ⚠ needs Atlas + R2
+### S15 — Backups and restore drill — ⚠ needs Atlas + a Supabase backup project
 **Outcome** — A documented, encrypted, off-site backup that has actually been restored once.
 **Covers** — FR-039 to FR-041.
 **Depends on** — S14.
@@ -371,7 +379,7 @@ requires `<6.1.0`; jsdom and Testing Library were deliberately left out until S0
 **Setup** — `BACKUP_*` variables and the `age` key, all on your machine.
 **AI work** — Backup script, encryption, upload, retention; write the runbook.
 **Owner action** — Hold the `age` private key offline.
-**Approach** — `mongodump` → `age` → `rclone`. The backup token never reaches Render.
+**Approach** — `mongodump` → `age` → upload to the backup project. The backup project's key never reaches Render.
 **Acceptance** — Archive produced and encrypted; restore into a scratch cluster reproduces counts and checksums; runbook sufficient without my help.
 **Verify** — B-01 to B-05; TEST_PLAN §10 drill.
 **Risks / rollback** — A drill that passes only because the author was present. If a step was unwritten, the runbook is the defect.
@@ -396,7 +404,7 @@ requires `<6.1.0`; jsdom and Testing Library were deliberately left out until S0
 **Covers** — FR-030, FR-031.
 **Depends on** — S08, S13 for real images.
 **Touches** — Gallery models, admin grid, public grid and viewer, video link management.
-**Setup** — R2 public bucket for real images.
+**Setup** — Supabase public bucket for real images.
 **AI work** — Upload, publish state, ordering, categories, alt text, click-to-load YouTube embed.
 **Owner action** — Supply approved photographs and confirm publication permission (school).
 **Approach** — Upload is never public; publication is explicit. Only the video id is stored, never the URL.
@@ -465,7 +473,7 @@ reach a demo sooner.
 
 ## 9. Approval record
 
-**Approved by:** project owner, 24 October 2026.
+**Approved by:** project owner, 24 October 2026 · **Revised:** 29 October 2026 (S13/S15 storage provider).
 
 The slice order is approved as written, including the judgement call in §5 — **S05 runs before
 S07**, accepting that authentication is built before cross-origin cookie behaviour is verified,
@@ -502,5 +510,7 @@ baseline and **D-02** gender values — ADR-031. **D-04** / Q13 editable school 
 | D-09 | Q7 — retention and permanent-deletion policy | Stage 2 | School |
 | D-10 | Q6 — Atlas tier for Stage 2 | Stage 2 | School |
 | D-11 | L-01 to L-10 in `SECURITY.md` §13.3 | Stage 2 | School + counsel |
+| **D-12** | Backup destination: a second Supabase project, or a third bucket in the application project | S15 | You |
+| **D-13** | Gallery publication: stage-then-publish, or accept that upload is publication | S13 / S17 | You |
 
 **None of these blocks S00.** The first that will matter is D-03, and only for real content at S04 — placeholders are acceptable until the Stage 1 demonstration.

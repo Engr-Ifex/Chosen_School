@@ -54,7 +54,7 @@ SG-12) and `ARCHITECTURE.md` §12.2.
 ## Technology
 
 React · Vite · TypeScript · Tailwind CSS · Express · Mongoose · MongoDB Atlas (Free) ·
-Cloudflare R2 (selected, not yet provisioned) · Vercel (frontend) · Render (API)
+Supabase Storage (selected, not yet provisioned) · Vercel (frontend) · Render (API)
 
 ## Before you deploy anything
 

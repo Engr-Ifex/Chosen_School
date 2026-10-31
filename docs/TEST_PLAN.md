@@ -6,9 +6,10 @@
 **Approved by:** project owner, 24 October 2026
 **Baseline:** `PRD.md`, `DESIGN.md`, `ARCHITECTURE.md`, `DATA_MODEL.md`, `API_SPEC.md`
 
-> No test in this plan has been written or run. This document defines what must be proven, and
-> what counts as proof. A test that passes because it asserts nothing is worse than no test,
-> because it buys false confidence.
+> This document defines what must be proven, and what counts as proof. Tests exist for the slices
+> completed so far — S01 covers configuration validation, the error envelope and the health
+> contract. Everything else is unwritten. A test that passes because it asserts nothing is worse
+> than no test, because it buys false confidence.
 
 ---
 
@@ -35,6 +36,14 @@ test cases, and are tracked in `ARCHITECTURE.md` §15.
 `mongodb-memory-server` is a real `mongod`, so indexes, validators and TTL behaviour are
 genuine. It is not Atlas, so Atlas-specific behaviour (pausing, connection limits) must be
 tested separately on the real cluster.
+
+**Database-dependent tests are opt-in.** `server/src/db.integration.test.ts` needs a `mongod`
+binary and is skipped unless `RUN_DB_TESTS=1` is set:/n/n```bash
+RUN_DB_TESTS=1 npm test --workspace server
+```
+
+**CI must set that flag.** Without it, the only test that proves the health endpoint against a real
+database silently stops running, and a green build means less than it appears to.
 
 ---
 
@@ -256,10 +265,10 @@ frontend cannot function without CORS, the rewrite is not in effect.
 | F-08 | Filename `../../etc/passwd.jpg` | Stored under a generated UUID; original name discarded |
 | F-09 | Two uploads with the same filename | Two distinct objects, no overwrite |
 | F-10 | Unauthenticated `GET` of a private photo path | `401` |
-| F-11 | Private bucket listing attempt over HTTP | Denied — no public access |
-| F-12 | Private photo URL guessed from the public gallery pattern | `404`; buckets are separate |
+| F-11 | Unauthenticated fetch of a private object via the public URL form | `400`/`403`/`404` — never the file |
+| F-12 | Private photo URL constructed from the public gallery pattern | Refused; the two buckets are separate and only one is public |
 | F-13 | Gallery image unpublished | Object still exists but is not returned publicly |
-| F-14 | Admission photo after permanent delete | Object removed from the bucket |
+| F-14 | Admission photo after permanent delete | Object removed from Supabase Storage |
 
 **Pass condition:** all pass. F-01, F-06, F-10, F-11 and F-14 are individually release-blocking.
 

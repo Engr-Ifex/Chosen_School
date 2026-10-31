@@ -2,7 +2,7 @@
 
 **Document status:** Living record
 **Version:** 1.0
-**Last updated:** 24 October 2026
+**Last updated:** 29 October 2026
 **Owner of this document:** technical planning
 
 > Every external service the product depends on, with its current status. A service is only
@@ -37,9 +37,9 @@ connects with it and succeeds.
 | I-02 | MongoDB Atlas | Primary database | Required | Awaiting my action |
 | I-03 | Vercel | Frontend hosting | Required | Awaiting my action |
 | I-04 | Render | API hosting | Required | Awaiting my action |
-| I-05 | Cloudflare R2 | Photo and gallery storage | Required | Awaiting my action |
-| I-06 | Cloudflare R2 (backup bucket) | Off-site encrypted backups | Required | Awaiting my action |
-| I-07 | Local backup toolchain | `mongodump` + `age` + `rclone` | Required | Planned |
+| I-05 | Supabase Storage | Private admission files and public gallery images | Required | Awaiting my action |
+| I-06 | Supabase Storage (backup project) | Off-site encrypted backups | Required | Awaiting my action — **D-12** |
+| I-07 | Local backup toolchain | `mongodump` + `age` + upload script | Required | Planned |
 | I-08 | Uptime monitoring | Availability alerting | Required for Stage 1 launch | Deferred |
 | I-09 | Custom domain + DNS | Stable hostname | Optional | Deferred |
 | I-10 | Error tracking | Exception reporting | Optional | Deferred |
@@ -162,53 +162,53 @@ connects with it and succeeds.
 
 ---
 
-### I-05 — Cloudflare R2 (application storage)
+### I-05 — Supabase Storage (application storage)
 
 | Field | Detail |
 |---|---|
-| **Provider** | Cloudflare R2 |
-| **Purpose** | Private admission photographs; public gallery images |
-| **Affected features** | FR-007–FR-013 (photo upload), FR-019–FR-022 (admin viewing), FR-030 (gallery) |
-| **Status** | Awaiting my action — **R2 is selected** (ADR-019); no account, bucket, token or connection exists yet |
-| **Connection method** | S3-compatible API from the Express server via an S3 client, endpoint `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` |
-| **Documentation** | https://developers.cloudflare.com/r2/ · https://developers.cloudflare.com/r2/api/tokens/ |
-| **Prerequisites** | Cloudflare account with R2 enabled. Two buckets |
-| **Permissions** | An API token scoped to **these two buckets only**, with object read/write. Not account-wide |
-| **Credentials** | Access key ID and secret access key from the scoped token |
-| **Environment variables** | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_PRIVATE`, `R2_BUCKET_PUBLIC`, `R2_PUBLIC_BASE_URL` |
-| **Environments** | Development (separate bucket or a `dev/` prefix), production |
-| **Security** | Private bucket must have **no public access and no public URL**. Private photos stream only through the authenticated API. Public bucket is read-only to the world and written only by the server |
-| **Setup steps** | 1. Enable R2. 2. Create `admissions-private` (private) and `gallery-public` (public read). 3. Create a scoped API token. 4. Record the endpoint and public base URL |
-| **Verification** | Upload an object with the scoped token; fetch it back; confirm an unauthenticated request to the private bucket fails |
-| **Failure handling** | Storage unreachable → the upload fails loudly and the application is **not** saved with a dangling photo reference |
-| **Cost limits** | 10 GB-month, 1 M Class A, 10 M Class B operations, zero egress |
+| **Provider** | Supabase Storage — **file storage only**, not Supabase Database |
+| **Purpose** | Private admission photographs and approved private admission files; public gallery images |
+| **Affected features** | FR-007–FR-013 (upload), FR-019–FR-022 (admin viewing), FR-030 (gallery) |
+| **Status** | Awaiting my action — **selected** (ADR-032); no project, bucket or key exists yet |
+| **Connection method** | `@supabase/supabase-js` from the Express server, `storage.from(bucket)` |
+| **Documentation** | https://supabase.com/docs/guides/storage |
+| **Prerequisites** | Supabase account and one project. Two buckets |
+| **Permissions** | The `service_role` key **bypasses row-level security entirely and cannot be scoped to a bucket**. Backend only |
+| **Credentials** | Project URL and service-role key |
+| **Environment variables** | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET_PRIVATE`, `SUPABASE_BUCKET_PUBLIC` |
+| **Environments** | Development (local stub, or a dev bucket in a spare project), production |
+| **Security** | Private bucket has no public URL; files reach the browser only through the authenticated API. Public bucket is world-readable by design and written only by the server. The service key must never reach the client — see `ENVIRONMENT_VARIABLES.md` §9 |
+| **Setup steps** | 1. Create the project. 2. Create `admissions-private` (private) and `gallery-public` (public). 3. Set per-bucket file-size and MIME restrictions. 4. Copy the project URL and service-role key |
+| **Verification** | Upload with the service key; read back; confirm an unauthenticated request to the private bucket is refused |
+| **Failure handling** | Upload failure → the application record is **not** saved with a dangling reference (§5.5) |
+| **Cost limits** | Free: **1 GB** storage, 5 GB + 5 GB cached egress, **50 MB** per file, **project pauses after 1 week idle**, **no backups** |
 | **Blockers** | None |
-| **Responsible** | Owner creates account, buckets and token; developer configures and verifies |
+| **Responsible** | Owner creates the project, buckets and key; developer configures and verifies |
 
 ---
 
-### I-06 — Cloudflare R2 (backup bucket)
+### I-06 — Supabase Storage (backup project)
 
 | Field | Detail |
 |---|---|
-| **Provider** | Cloudflare R2, separate bucket and **separate API token** |
-| **Purpose** | Off-site storage of encrypted database and file backups |
+| **Provider** | Supabase Storage, in a **second project** — proposed, see **D-12** |
+| **Purpose** | Off-site storage of encrypted database and file archives |
 | **Affected features** | FR-039–FR-041 (backup and recovery) |
-| **Status** | Awaiting my action — **R2 is selected** (ADR-020); the backup bucket and its separate token do not exist yet |
-| **Connection method** | `rclone` from the developer machine, not from Render |
-| **Documentation** | https://developers.cloudflare.com/r2/ |
-| **Prerequisites** | The same Cloudflare account; a third bucket |
-| **Permissions** | A **distinct** token scoped to the backup bucket only |
-| **Credentials** | Separate access key and secret. Encryption key held offline |
+| **Status** | Awaiting my action — selected (ADR-032); **D-12 still needs your decision** |
+| **Connection method** | A Node backup script using `@supabase/supabase-js`, run from the developer machine |
+| **Documentation** | https://supabase.com/docs/guides/storage |
+| **Prerequisites** | A second Supabase project (the free plan allows two active projects), one private bucket |
+| **Permissions** | That project's own `service_role` key |
+| **Credentials** | Separate URL and key. `age` private key held offline |
 | **Environment variables** | None on Render. Local only — see `ENVIRONMENT_VARIABLES.md` §4 |
-| **Environments** | Production backups run from the developer machine |
-| **Security** | **The application server must not hold backup credentials.** If it did, a compromised API could delete every backup of the data it just corrupted. The encryption key never touches Render, the repository, or the same provider as the ciphertext |
-| **Setup steps** | 1. Create the backup bucket. 2. Create the separate token. 3. Generate an `age` key pair; store the private key offline. 4. Configure `rclone` locally |
-| **Verification** | A dump is encrypted, uploaded, downloaded, decrypted, and restored into a scratch cluster. Recorded in §7 |
-| **Failure handling** | A backup job without the encryption key must fail loudly and never upload plaintext |
-| **Cost limits** | Within the same 10 GB free allowance |
-| **Blockers** | None |
-| **Responsible** | Owner creates the bucket and token, and holds the offline key |
+| **Environments** | Backups run from the developer machine |
+| **Security** | **The application server must not hold the backup project's key.** A Supabase service key cannot be bucket-scoped, so project separation is the only way to keep backups unreachable from a compromised API |
+| **Setup steps** | 1. Create the backup project. 2. Create `backups` (private). 3. Copy its URL and key. 4. Generate an `age` pair, store the private key offline |
+| **Verification** | Dump → encrypt → upload → download → decrypt → restore into a scratch Atlas cluster (§7) |
+| **Failure handling** | Missing key → abort; never upload plaintext |
+| **Cost limits** | Its own free allowance: another 1 GB and another 7-day pause clock. A paused backup project means the nightly job fails |
+| **Blockers** | **D-12** — same project or a second one |
+| **Responsible** | Owner creates the project and bucket, and holds the offline key |
 
 ---
 
@@ -217,14 +217,14 @@ connects with it and succeeds.
 | Field | Detail |
 |---|---|
 | **Provider** | None — local tooling |
-| **Purpose** | `mongodump` → `age` → `rclone`, nightly |
+| **Purpose** | `mongodump` → `age` → upload to the backup project, nightly |
 | **Affected features** | FR-039–FR-041 |
 | **Status** | Planned |
-| **Connection method** | Local executables |
-| **Documentation** | MongoDB database tools; `age`; `rclone` |
+| **Connection method** | `mongodump`, `age`, and a Node script using `@supabase/supabase-js` |
+| **Documentation** | MongoDB database tools; age; https://supabase.com/docs/guides/storage |
 | **Prerequisites** | Tools installed on the developer machine. A read-only Atlas user for backups is preferable to reusing the application user |
-| **Permissions** | Read on the application database |
-| **Credentials** | Atlas read credentials, R2 backup token, `age` private key |
+| **Permissions** | Read on the application database; write on the backup project's bucket |
+| **Credentials** | Atlas read credentials, backup project key, `age` private key |
 | **Environment variables** | Local file only (`.env.backup`), never in Render |
 | **Environments** | Developer machine |
 | **Security** | The `age` private key is stored offline — password manager plus a written copy. It is never committed, never uploaded, never on Render |
@@ -281,8 +281,8 @@ This belongs in the Stage 2 security review (SG-02). It is not a detail to be di
 |---|---|---|
 | Atlas application user | Render environment | Repository, client bundle, logs |
 | Atlas backup user | Developer machine | Render |
-| R2 application token | Render environment | Repository, client bundle |
-| R2 backup token | Developer machine | Render |
+| Supabase service-role key (application project) | Render environment | Repository, client bundle, logs |
+| Supabase service-role key (backup project) | Developer machine | Render |
 | `age` private key | Offline only | Any machine that runs the application |
 | Admin password | Argon2id hash in the database | Anywhere in plaintext, ever |
 
@@ -292,7 +292,7 @@ Under NDPA 2023 **s.29**, the controller must ensure each processor complies wit
 with data-subject rights, and implements appropriate technical and organisational measures. The
 Act states that these measures **include a written agreement** between controller and processor.
 
-Vercel, Render, Cloudflare and MongoDB all act as **processors** of children's and parents' data
+Vercel, Render, Supabase and MongoDB all act as **processors** of children's and parents' data
 in this architecture. Written terms with each are therefore a Stage 2 requirement (S2-03 in
 `SECURITY.md` §18), and the school — not the developer — is the controller that must satisfy
 itself they are adequate.
@@ -304,7 +304,25 @@ while the technical work proceeds.
 ### 5.4 What must never cross into the browser
 
 Only `VITE_`-prefixed variables reach the bundle, and Vite inlines them at build time. They are
-public. No database URI, API token, or bucket secret may use that prefix — not even temporarily.
+public. No database URI, API key, or bucket secret may use that prefix — not even temporarily.
+There is no `VITE_SUPABASE_*`: the browser never holds a Supabase credential.
+
+### 5.5 Upload failure, orphans and replacement
+
+Supabase Storage is a second system of record, and the two cannot be updated atomically. The
+ordering rules below exist so that no failure leaves a record pointing at a file that is not
+there, or a file that no record points to.
+
+| Situation | Handling |
+|---|---|
+| **Upload succeeds, database write fails** | Delete the just-uploaded object, then return the error. An orphan is better than a broken record, but neither should be left behind silently |
+| **Upload fails** | Save nothing. The application record is not created with a dangling reference |
+| **Database write succeeds, object delete fails (permanent delete)** | Abort the delete and report it. The record stays, so the operation can be retried — see `DATA_MODEL.md` §4.6 |
+| **File replacement (edit)** | Upload the new object under a new key, update the record, **then** delete the old key. Deleting first loses the photo if the update fails |
+| **Orphan detected** | A periodic reconciliation compares object keys against stored references and reports mismatches. It reports; it does not auto-delete, because a false positive would destroy a child's photograph |
+
+**There is no transaction across the two systems.** Every path above is written so the recoverable
+failure is the one that happens.
 
 ---
 
@@ -315,7 +333,7 @@ Checked on 24 October 2026.
 | Capability | Available here? | Consequence |
 |---|---|---|
 | Installed connectors | **None** | Nothing can be driven through a connector today |
-| Official MCP connector for Atlas, Vercel, Render or Cloudflare | **None found** | These must be set up manually in each provider's dashboard |
+| Official MCP connector for Atlas, Vercel, Render or Supabase | **None found** | These must be set up manually in each provider's dashboard |
 | GitHub connector | Available, not installed | Could clone and manage the repository. Not needed yet — local `git` is sufficient until the repo exists |
 | Provider CLIs | Not installed | `mongosh`, `wrangler`, `vercel`, `render` could be installed locally later if useful |
 | Web research | Available | Used for all provider claims in `ARCHITECTURE.md` §6 |
@@ -335,8 +353,8 @@ Nothing has been verified. This table is filled in as each check is actually run
 |---|---|---|---|---|---|
 | V-01 | Atlas connection | scratch write/read/delete script | Document round-trips | **Not run** — no credentials | — |
 | V-02 | Atlas rejects bad credentials | connect with wrong password | Auth error, no data leak | **Not run** | — |
-| V-03 | R2 private bucket is not public | unauthenticated `GET` on an object | 403/404 | **Not run** | — |
-| V-04 | R2 scoped token cannot reach other buckets | request a foreign bucket | Access denied | **Not run** | — |
+| V-03 | Private bucket is not public | unauthenticated `GET` on the public-path form of a private object | `400`/`403`/`404` — never the file | **Not run** | — |
+| V-04 | Public bucket serves gallery images | unauthenticated `GET` on a public object URL | `200` with the image | **Not run** | — |
 | V-05 | Render health endpoint | `GET /api/v1/health` | `200`, no internal detail | **Not run** | — |
 | V-06 | Cold start through Vercel proxy | idle 20 min, then request | Success, or honest failure; latency recorded | **Not run** | — |
 | V-07 | Cookie is first-party on Vercel origin | DevTools → Cookies | Attributed to Vercel origin, `__Host-` accepted | **Not run** | — |
