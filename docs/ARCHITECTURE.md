@@ -669,7 +669,8 @@ the client as a generic message plus a request id.
 
 1. Push to the default branch.
 2. **Vercel** builds `client/` (`vite build`) and publishes the static output.
-3. **Render** builds `server/` (`npm ci`, `tsc`), then starts the service.
+3. **Render** builds `server/` with `npm run build --workspace server`, then starts it with
+   `npm start --workspace server`. See §11.1 for why this is more fragile than it looks.
 4. Environment variables are configured in both dashboards, not in the repository.
 5. Atlas network access must allow Render's egress addresses. Render free services do not have
    static outbound IPs, so the Atlas allowlist must be broad — which is a security compromise
@@ -679,6 +680,32 @@ the client as a generic message plus a request id.
 6. Migrations: Mongo has no schema migrations. Index changes are applied by a documented
    script that runs `syncIndexes()` on each model, executed deliberately, never automatically
    on boot.
+
+### 11.1 The build is a production concern, not a development one
+
+A TypeScript server has a split personality: the **runtime** needs `express` and `mongoose`, but
+the **build** needs `typescript` and `@types/node`. On a platform that installs only production
+dependencies before building, the second group is missing and the build fails — with
+`TS2688: Cannot find type definition file for 'node'`, which names the symptom rather than the
+cause.
+
+Two things prevent it, and both are required:
+
+1. **`typescript`, `@types/node` and `@types/express` are declared as `dependencies`** in
+   `server/package.json`, not `devDependencies`. They are inputs to producing the artifact, so they
+   must survive `--omit=dev`. Test-only packages (`vitest`, `supertest`, `mongodb-memory-server`,
+   `tsx`) stay in `devDependencies`.
+2. **The build excludes test files.** `server/tsconfig.json` compiles `src` but excludes
+   `src/**/*.test.ts`; type-checking tests is a separate config, `server/tsconfig.test.json`, used
+   by `npm run typecheck`. Without this, the build imports `vitest` and `supertest` — absent from a
+   production install — and ships test code into `dist/`.
+
+The cost is that `typescript` is present in the deployed image. That is the price of building on
+the platform. If the build ever moves to CI or a multi-stage container, both packages can return to
+`devDependencies` and the build can run against a full install.
+
+**Do not "fix" this by removing `"node"` from the `types` array.** That silences the error and
+leaves `process`, `Buffer` and `node:` imports untyped — the error is the build telling the truth.
 
 ---
 

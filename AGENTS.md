@@ -75,12 +75,17 @@ Verified on **28 October 2026**:
 deletion had to be repaired with `npm install`. `npm ci --dry-run` resolves the lockfile without
 error. Confirm it on CI or a clean machine before depending on it.
 
-**Two conventions that will bite if forgotten:**
+**Three conventions that will bite if forgotten:**
 
 - The server uses ESM (`"type": "module"`, `module: nodenext`). **Relative imports need a `.js`
   extension** even though the source is `.ts` — `import { start } from './index.js'`.
 - Only `client/src` and `server/src` are compiled. New top-level source directories need adding
   to the relevant `tsconfig.json`.
+- **`typescript`, `@types/node` and `@types/express` are `dependencies`, not `devDependencies`.**
+  Render may build from a production-only install, where devDependencies are absent and the build
+  fails with `TS2688`. Do not move them back without also changing the build environment. Test-only
+  packages stay in `devDependencies`, and `server/tsconfig.json` excludes `*.test.ts` so the build
+  never needs them. Rationale: `docs/ARCHITECTURE.md` §11.1.
 
 ## 6. Coding conventions
 

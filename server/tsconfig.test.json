@@ -1,0 +1,9 @@
+{
+  "//": "Type-checking configuration. Includes tests, emits nothing. The build config (tsconfig.json) excludes tests so that production installs — which have no vitest or supertest — can still compile, and so test code never reaches dist/.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src"],
+  "exclude": []
+}
