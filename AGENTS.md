@@ -6,10 +6,9 @@ Instructions for any AI agent working in this repository. Short by design — de
 
 ## 1. Repository state — read this first
 
-**Data layer exists; the product does not.** ROADMAP slices S00–S02 are complete: one endpoint
-(`GET /api/v1/health`), configuration validation, the error envelope, request logging, and four
-Mongoose models (`applications`, `settings`, `admins`, `sessions`) with a synthetic seed. There are
-no public routes, no admin routes and no real pages yet.
+**One public endpoint exists; the product does not.** ROADMAP slices S00–S03 are complete:/n`GET /api/v1/health`, `POST /api/v1/public/applications`, configuration validation, the error
+envelope, request logging, four Mongoose models with a synthetic seed. There are no admin routes,
+no authentication and no real pages yet.
 
 Verified by inspection on 28 October 2026:
 
@@ -66,8 +65,8 @@ Verified on **28 October 2026**:
 |---|---|---|
 | Install | `npm install` | 157 packages, 0 vulnerabilities |
 | Development | `npm run dev` (client, `:5173`) · `npm run dev:server` (API) | Client served `HTTP 200` |
-| Tests | `npm test` | 49 tests in 8 files — 43 pass, 6 skipped (database integration, opt-in) |
-| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | 49 pass, requires a `mongod` binary |
+| Tests | `npm test` | 68 tests in 10 files — 54 pass, 14 skipped (database integration, opt-in) |
+| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | 68 pass, requires a `mongod` binary |
 | Seed | `npm run seed --workspace server` | 20 synthetic applications; refuses in production |
 | Indexes | `npm run sync-indexes --workspace server` | Creates declared indexes; `autoIndex` is off by design |
 | Lint | `npm run lint` | 0 problems |

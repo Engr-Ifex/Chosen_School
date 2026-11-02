@@ -11,6 +11,7 @@ import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { requestContext } from './middleware/request.js';
 import type { Logger } from './logger.js';
 import { healthRouter, type HealthProbe } from './routes/health.js';
+import { publicApplicationsRouter } from './routes/public/applications.js';
 
 export interface AppOptions {
   logger: Logger;
@@ -65,6 +66,7 @@ export function createApp(options: AppOptions): Express {
   app.use(express.json({ limit: '100kb' }));
 
   app.use('/api/v1', healthRouter(healthProbe));
+  app.use('/api/v1/public', publicApplicationsRouter());
 
   app.use(notFoundHandler);
   app.use(errorHandler(logger));

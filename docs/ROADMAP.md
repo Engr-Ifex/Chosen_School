@@ -223,6 +223,7 @@ announcements slice.
 assert derived fields must use the async form.
 
 ### S03 — Admission submission API
+**Status:** Complete — 2 November 2026
 **Outcome** — A valid submission is persisted; an invalid one is rejected field by field.
 **Covers** — FR-007 to FR-011, FR-013.
 **Depends on** — S02.
@@ -235,6 +236,28 @@ assert derived fields must use the async form.
 **Verify** — API-P07 to P11, API-P14, API-P15.
 **Risks / rollback** — Validation duplicated in two places drifting apart. Keep Zod as the boundary and Mongoose as the backstop, and test both.
 **DoD** — A record submitted by `curl` appears in the database with correct derived fields.
+
+**Completion note (2 Nov 2026).** `POST /api/v1/public/applications` implemented with a Zod boundary
+(`schemas/admission.ts`), a service (`services/admissions.ts`) and a thin route. All seven
+verification IDs pass against a real `mongod`: API-P07 to P11, P14, P15. The DoD was also performed
+literally — a `curl` submission landed with `search.studentName` and `search.guardianPhone` derived,
+the phone normalised from `0803 555 1234` to `08035551234`, and `signedAt`/`submittedAt` set by the
+server.
+
+**A contradiction in the planning documents, and how it was resolved.** This slice's *Approach* line
+says "reject immutable-field attempts rather than ignoring them", but API_SPEC §2.6 says those
+fields are "stripped, not honoured", TEST_PLAN API-P08 expects the submission to **succeed** with
+the values ignored, and this slice's own acceptance criterion says "client-supplied `submittedAt`
+ignored". Three sources against one, so the implementation strips: server-owned fields are absent
+from the Zod schema and cannot be supplied at all. If rejecting is actually wanted, it is a one-line
+change to `.strict()` — but the acceptance criterion would need to change with it.
+
+**Not in this slice:** the photo. `API_SPEC` §2.6 describes a multipart body, but photo handling is
+S08. S03 accepts `application/json` only, which matches API-P07 ("valid, no photo").
+
+**Missing settings returns 503, not 422.** Without the settings document there are no class or
+session lists, so no submission can be validated. Blaming the parent's form for an unconfigured
+server would be wrong.
 
 ### S04 — Admission form UI — first end-to-end
 **Outcome** — **A parent can complete the form and see the exact success message.** The product's first user-visible promise is kept.
