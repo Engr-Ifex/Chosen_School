@@ -35,9 +35,14 @@ Design a professional, trustworthy, accessible and responsive public website for
 - Authentic school photography and facilities.
 - Preserve and refine the school's existing identity rather than inventing a replacement brand.
 
-### 2.2 Decisions to make during visual design
+### 2.2 Branding status — **[APPROVED 2 November 2026]**
 
-The exact logo, official colours, typography, button treatment, icon style, border radii, shadows and spacing tokens remain to be confirmed after the school supplies its branding. Use a provisional neutral design system during implementation and clearly mark temporary assets. Do not treat provisional colours or stock imagery as final branding.
+The school has supplied its logo and approved the **Royal Blue & Warm Gold** direction. This
+supersedes the earlier instruction to use a provisional neutral system: colours, logo and their
+usage are settled and recorded in §2.4 and §2.5.
+
+**Still outstanding:** typography (no typeface has been supplied, so the system UI stack is used and
+must not be treated as a final choice) and photography.
 
 ### 2.3 Component conventions
 
@@ -47,6 +52,95 @@ The exact logo, official colours, typography, button treatment, icon style, bord
 - Use consistent status labels for drafts, published content, new/reviewed/responded records and trashed items.
 - Destructive actions should be visually distinct and require a clear confirmation step.
 - Avoid relying on colour alone to communicate status or validation.
+
+### 2.4 Colour system — **[APPROVED]**
+
+Implemented as Tailwind v4 `@theme` tokens in `client/src/index.css`. Components reference the
+token name, never a raw hex — a palette change is one edit, not a search.
+
+| Token | Hex | Use |
+|---|---|---|
+| `--color-brand` | `#1769AA` | Primary Blue — buttons, links, active navigation |
+| `--color-brand-hover` | `#12558D` | Hover and active states |
+| `--color-brand-dark` | `#123B5D` | Deep Navy — footer, dark sections, strong headings |
+| `--color-brand-soft` | `#EAF3FA` | Light Blue — information panels |
+| `--color-accent` | `#D99A32` | Warm Gold — highlights, rules, accents |
+| `--color-accent-strong` | `#B77916` | Deep Gold — large gold text, rules |
+| `--color-accent-ink` | `#9C6612` | Gold **body-sized text** (derived, see below) |
+| `--color-accent-soft` | `#F8EBD2` | Pale Gold — soft highlights |
+| `--color-page` | `#FFF8EA` | Warm Cream — page background |
+| `--color-surface` | `#FFFFFF` | Cards, forms, content |
+| `--color-ink` | `#263238` | Body text |
+| `--color-muted` | `#64748B` | Secondary text |
+| `--color-line` | `#DBE4EC` | Borders (derived neutral) |
+| `--color-support` | `#245B3A` | Forest Green — very limited supporting accent |
+
+**Status colours are deliberately outside the brand hue family**, so a warning never reads as
+decoration: `success #166534`, `warning #C2410C`, `danger #B91C1C`, `info #1769AA`.
+
+**Two derived values, and why.** `--color-line` and `--color-accent-ink` are not new brand colours;
+they are tints of the approved palette added because the palette alone cannot meet contrast:
+
+- `#B77916` reaches only **3.45:1** on cream, so it is unusable for body-sized gold text.
+  `#9C6612` reaches **4.60:1** and is used for text only.
+- A border colour was not specified. `#DBE4EC` is a cool neutral that separates surfaces without
+  competing with either blue or gold.
+
+#### Measured contrast (WCAG 2.1, computed 2 November 2026)
+
+| Pair | Ratio | AA normal text (4.5) |
+|---|---|---|
+| Body text on cream | 12.45:1 | Pass |
+| Body text on white | 13.16:1 | Pass |
+| Muted text on white | 4.76:1 | Pass |
+| Muted text on cream | 4.50:1 | Pass (marginal — do not lighten) |
+| Link on white | 5.77:1 | Pass |
+| White on Primary Blue | 5.77:1 | Pass |
+| White on Deep Navy | 11.61:1 | Pass |
+| **Deep Navy on Warm Gold** | **4.76:1** | **Pass — the accent button** |
+| White on Deep Gold | 3.65:1 | **Fail** — large text only |
+| White on Warm Gold | 2.44:1 | **Fail** — never use |
+| Gold text (`accent-ink`) on cream | 4.60:1 | Pass |
+
+**The gold button decision.** The brief offered two options: deep gold with white text, or warm gold
+with navy text. Measurement settles it — deep gold behind white is 3.65:1, below AA for normal-size
+text. The `accent` button therefore uses **warm gold with Deep Navy text**. This is a documented
+deviation from the first option, not from the palette.
+
+### 2.5 Logo — **[APPROVED]**
+
+The official crest, supplied as a 1024×1024 black-and-white JPEG. **It has not been redrawn.**
+Every variant is the same artwork with the ink colour changed.
+
+**How the variants were produced.** The source is black line art on white. Alpha was taken as
+`255 − luminance`, which makes the ink opaque and the paper transparent while preserving the
+original anti-aliasing — so edges stay smooth rather than thresholded. The artwork was then trimmed
+to its bounding box and tinted. Nothing was traced, resampled in shape, or regenerated.
+
+| File | Colour | Use |
+|---|---|---|
+| `chosen-school-logo-navy.png` | `#123B5D` | **Default.** Cream and white backgrounds |
+| `chosen-school-logo-blue.png` | `#1769AA` | Where the crest must match brand blue |
+| `chosen-school-logo-reverse.png` | `#FFFFFF` | Deep Navy and brand-blue backgrounds |
+| `chosen-school-logo-monochrome.png` | `#000000` | Documents and print |
+| `chosen-school-logo-gold.png` | `#B77916` | Decorative only — never primary branding |
+
+Location: `client/src/assets/brand/`. Rendered through `components/brand/Logo.tsx`, which fixes the
+intrinsic 512×523 ratio so the crest can never be stretched.
+
+**Favicon.** A square crop of the shield from the navy variant, at `client/public/favicon-64.png`
+and `apple-touch-icon.png`. The full crest is illegible at 32px; the shield's C/S quadrants are not.
+
+**Usage rules.** Pick by background, not preference. Never stretch, never place on a busy
+photograph, never recolour outside the variants above. Keep clear space of at least the height of
+the letter "C" in the shield.
+
+**Not done, and why:** a **two-tone blue-and-gold crest**. Splitting the artwork into gold and blue
+regions means deciding which elements are gold — a design decision about the school's mark that the
+supplied file does not answer. It needs either a vector source or an explicit instruction. Until
+then the crest is single-colour, and gold appears in the surrounding interface.
+
+---
 
 ## 3. Information architecture
 

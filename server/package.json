@@ -8,6 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.test.json",
+    "seed": "tsx --env-file=.env src/scripts/seed.ts",
+    "sync-indexes": "tsx --env-file=.env src/scripts/sync-indexes.ts",
     "test": "vitest run"
   },
   "dependencies": {

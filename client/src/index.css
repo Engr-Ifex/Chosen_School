@@ -1,1 +1,93 @@
 @import 'tailwindcss';
+
+/*
+ * Chosen School brand tokens — Tailwind v4 `@theme`.
+ *
+ * Every colour below comes from the approved Royal Blue & Warm Gold palette
+ * (docs/DESIGN.md §2.4). Components must use these names, never a raw hex, so
+ * that a palette change is one edit rather than a search across the codebase.
+ *
+ * Naming is semantic where the meaning is fixed (`--color-ink`, `--color-line`)
+ * and literal where the brand role is the meaning (`--color-brand`). A token
+ * called `--color-blue-500` would invite someone to use "a blue" instead of
+ * "the brand".
+ */
+@theme {
+  /* ---- Brand -------------------------------------------------------- */
+  --color-brand: #1769aa; /* Primary Blue — buttons, links, active nav */
+  --color-brand-hover: #12558d; /* hover / active */
+  --color-brand-dark: #123b5d; /* Deep Navy — footer, dark sections */
+  --color-brand-soft: #eaf3fa; /* Light Blue — info panels */
+
+  /* ---- Gold --------------------------------------------------------- */
+  --color-accent: #d99a32; /* Warm Gold — highlights, rules, accents */
+  --color-accent-strong: #b77916; /* Deep Gold — large text, rules, emphasis */
+  --color-accent-soft: #f8ebd2; /* Pale Gold — soft highlights */
+  /*
+   * Gold for small text. #B77916 reaches only 3.45:1 on cream, which fails AA
+   * for body-sized text; this shade reaches 4.60:1. It is a darkened tint of
+   * the approved gold, not a new brand colour — see docs/DESIGN.md §2.4.
+   */
+  --color-accent-ink: #9c6612;
+
+  /* ---- Neutrals ----------------------------------------------------- */
+  --color-page: #fff8ea; /* Warm Cream — page background */
+  --color-surface: #ffffff; /* cards, forms, content */
+  --color-ink: #263238; /* Dark Charcoal — body text */
+  --color-muted: #64748b; /* secondary text */
+  --color-line: #dbe4ec; /* borders — derived neutral, see DESIGN.md §2.4 */
+
+  /* ---- Supporting accent -------------------------------------------- */
+  --color-support: #245b3a; /* Forest Green — limited use only */
+
+  /* ---- Status ------------------------------------------------------- */
+  /* Deliberately outside the brand hue family so a status colour is never
+     mistaken for a brand accent. See DESIGN.md §2.4 for the reasoning. */
+  --color-success: #166534;
+  --color-success-soft: #e7f5ec;
+  --color-warning: #c2410c;
+  --color-warning-soft: #fdeee7;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fdeaea;
+  --color-info: #1769aa;
+  --color-info-soft: #eaf3fa;
+
+  /* ---- Shape -------------------------------------------------------- */
+  --radius-card: 0.75rem;
+  --radius-control: 0.5rem;
+}
+
+/*
+ * Base layer. Kept small on purpose: global element styling is where a design
+ * system usually starts fighting the components.
+ */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-page);
+    color: var(--color-ink);
+    font-family:
+      ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /*
+   * One focus style for the whole site. `:focus-visible` rather than `:focus`
+   * so a mouse click does not leave a ring behind, while keyboard users always
+   * get one. Gold on navy, navy on light — never invisible.
+   */
+  :focus-visible {
+    outline: 2px solid var(--color-accent-strong);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background-color: var(--color-brand-soft);
+    color: var(--color-brand-dark);
+  }
+}

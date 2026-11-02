@@ -190,6 +190,7 @@ shutdown is implemented but unobserved — Windows `taskkill` does not deliver a
 Both should be confirmed on CI or Linux before S02 is called done.
 
 ### S02 — Data layer, models, synthetic seed
+**Status:** Complete — 2 November 2026
 **Outcome** — Mongoose models with real validation and indexes, and a seed script of fake records.
 **Covers** — FR-007 to FR-013 (data side), FR-034 (placement options).
 **Depends on** — S01.
@@ -202,6 +203,24 @@ Both should be confirmed on CI or Linux before S02 is called done.
 **Verify** — DB-01, DB-05, DB-07, DB-08, DB-11, DB-12.
 **Risks / rollback** — Modelling too much too early. Only `applications`, `settings`, `admins`, `sessions` are needed now; the rest arrive with their slices.
 **DoD** — Seed produces 20 fake applications that render in a raw query.
+
+**Completion note (2 Nov 2026).** Four models built: `applications`, `settings`, `admins`,
+`sessions`, with `lib/phone.ts` for normalisation and two scripts — `seed` and `sync-indexes`.
+`autoIndex` is off on every schema (AGENTS.md §8); indexes exist only when `sync-indexes` is run.
+
+**All six verification IDs were run against a real `mongod` 6.0.14**, not a mock: DB-01, DB-05,
+DB-07, DB-08, DB-11 and the DoD. The seed was executed twice — second run reported
+`removed: 20, created: 20, withSearch: 20`, so it is idempotent and only ever deletes rows whose
+surname starts with `TEST-`.
+
+**DB-12 was not covered and is deferred.** It asserts that an `event` block on `kind:
+"announcement"` is rejected, which requires the `announcements` model — out of scope here, since
+S02 deliberately builds only the four collections its slices need. DB-12 moves to the
+announcements slice.
+
+**One behaviour worth remembering:** `validateSync()` does **not** run middleware, so the
+`pre('validate')` hook that derives `search` only fires on `validate()` or `save()`. Tests that
+assert derived fields must use the async form.
 
 ### S03 — Admission submission API
 **Outcome** — A valid submission is persisted; an invalid one is rejected field by field.
