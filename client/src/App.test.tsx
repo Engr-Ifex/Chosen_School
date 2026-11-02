@@ -1,28 +1,44 @@
-import { renderToString } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 
-describe('App', () => {
-  it('renders the school name', () => {
-    expect(renderToString(<App />)).toContain('Chosen School');
+vi.mock('./lib/api', () => ({
+  fetchPlacementOptions: vi.fn().mockResolvedValue({
+    primary: ['Primary 1'],
+    secondary: ['JSS 1'],
+    sessions: ['2026/2027'],
+    currentSession: '2026/2027',
+  }),
+  submitApplication: vi.fn(),
+}));
+
+beforeEach(() => {
+  window.history.pushState({}, '', '/');
+});
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+describe('routes', () => {
+  it('serves the home page at /', () => {
+    render(<App />);
+    expect(screen.getByRole('heading', { name: /primary & secondary/i })).toBeTruthy();
   });
 
-  it('renders the crest with accessible alternative text', () => {
-    const html = renderToString(<App />);
-    expect(html).toContain('Chosen School crest, navy version');
+  it('serves the admission form at /admissions', async () => {
+    window.history.pushState({}, '', '/admissions');
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: /apply for admission/i })).toBeTruthy();
   });
 
-  it('marks itself as a design-system preview rather than the public site', () => {
-    expect(renderToString(<App />)).toContain('Design system preview');
-  });
+  it('serves a not-found page for an unknown route', () => {
+    window.history.pushState({}, '', '/no-such-page');
+    render(<App />);
 
-  it('renders the shared button primitive', () => {
-    expect(renderToString(<App />)).toContain('Apply for admission');
-  });
-
-  it('renders status labels as words, not colour alone', () => {
-    const html = renderToString(<App />);
-    expect(html).toContain('Reviewed');
-    expect(html).toContain('Needs attention');
+    expect(screen.getByRole('heading', { name: /page not found/i })).toBeTruthy();
   });
 });
