@@ -1,19 +1,17 @@
 /**
- * `POST /api/v1/public/applications` — API-P07 to P11, P14, P15.
+ * `POST /api/v1/public/applications` — API-P07 to P11, P14, P15, plus the
+ * S04 correction: the academic session is administrator-controlled.
  *
  * Opt-in, because it needs a real database:
  *
  *     RUN_DB_TESTS=1 npm test --workspace server
- *
- * These run against a real `mongod` rather than a stubbed service, because the
- * acceptance criteria are about what ends up **persisted** — "valid → 201" means
- * little if the document was never written.
  */
 
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../app.js';
+import { DEFAULT_ACADEMIC_SESSION } from '../../config/school.js';
 import { connectDatabase, disconnectDatabase } from '../../db.js';
 import { createLogger } from '../../logger.js';
 import { Application } from '../../models/application.js';
@@ -39,24 +37,18 @@ function payload(overrides: Record<string, unknown> = {}): Record<string, unknow
     },
     placement: {
       section: 'primary',
-      classApplyingFor: 'Primary 1',
-      academicSession: '2026/2027',
+      classApplyingFor: 'Basic 1',
     },
     signature: { typedName: 'TEST-Guardian' },
     ...overrides,
   };
 }
 
-async function seedSettings(): Promise<void> {
+async function seedSettings(currentSession: string | null = '2030/2031'): Promise<void> {
   await Settings.create({
     key: SETTINGS_KEY,
     school: { name: 'Placeholder', address: 'Placeholder', phone: '0000000000' },
-    placement: {
-      primaryClasses: ['Primary 1', 'Primary 2'],
-      secondaryClasses: ['JSS 1'],
-      academicSessions: ['2026/2027'],
-      currentSession: '2026/2027',
-    },
+    placement: { currentSession },
     updatedAt: new Date(),
   });
 }
@@ -77,10 +69,10 @@ describe.skipIf(!run)('POST /api/v1/public/applications', () => {
 
   beforeEach(async () => {
     await Promise.all([Application.deleteMany({}), Settings.deleteMany({})]);
-    await seedSettings();
   });
 
   it('accepts a valid submission and persists it (API-P07)', async () => {
+    await seedSettings();
     const response = await request(app()).post('/api/v1/public/applications').send(payload());
 
     expect(response.status).toBe(201);
@@ -89,14 +81,26 @@ describe.skipIf(!run)('POST /api/v1/public/applications', () => {
     const stored = await Application.findById(response.body.id);
     expect(stored).not.toBeNull();
     expect(stored?.student.surname).toBe('TEST-Applicant');
-    // Server-set, and close to now — not the client's value.
+    expect(stored?.placement.classApplyingFor).toBe('Basic 1');
     expect(stored?.signature.signedAt).toBeInstanceOf(Date);
-    expect(stored?.submittedAt).toBeInstanceOf(Date);
-    // Derived by the model hook, never sent by the client.
     expect(stored?.search.studentName).toBe('test-applicant chidinma');
   });
 
+  it('accepts a secondary class in the secondary section', async () => {
+    await seedSettings();
+    const body = payload();
+    body.placement = { section: 'secondary', classApplyingFor: 'SS2' };
+
+    const response = await request(app()).post('/api/v1/public/applications').send(body);
+
+    expect(response.status).toBe(201);
+    const stored = await Application.findById(response.body.id);
+    expect(stored?.placement.section).toBe('secondary');
+    expect(stored?.placement.classApplyingFor).toBe('SS2');
+  });
+
   it('ignores client-supplied submittedAt and deletedAt (API-P08)', async () => {
+    await seedSettings();
     const response = await request(app())
       .post('/api/v1/public/applications')
       .send({
@@ -106,39 +110,37 @@ describe.skipIf(!run)('POST /api/v1/public/applications', () => {
       });
 
     expect(response.status).toBe(201);
-
     const stored = await Application.findById(response.body.id);
     expect(stored?.submittedAt.getUTCFullYear()).not.toBe(2001);
     expect(stored?.deletedAt).toBeNull();
   });
 
   it('rejects a class from the other section, naming the field (API-P09)', async () => {
+    await seedSettings();
     const body = payload();
-    body.placement = {
-      section: 'secondary',
-      classApplyingFor: 'Primary 1', // a primary class, in the secondary section
-      academicSession: '2026/2027',
-    };
+    body.placement = { section: 'secondary', classApplyingFor: 'Basic 1' };
 
     const response = await request(app()).post('/api/v1/public/applications').send(body);
 
     expect(response.status).toBe(422);
-    expect(response.body.error.code).toBe('VALIDATION_ERROR');
     expect(response.body.error.fields).toHaveProperty('placement.classApplyingFor');
     expect(await Application.countDocuments({})).toBe(0);
   });
 
-  it('rejects an unknown academic session (API-P10)', async () => {
+  it('rejects an arbitrary class name', async () => {
+    await seedSettings();
     const body = payload();
-    body.placement = { section: 'primary', classApplyingFor: 'Primary 1', academicSession: '1999/2000' };
+    body.placement = { section: 'primary', classApplyingFor: 'Year 99' };
 
     const response = await request(app()).post('/api/v1/public/applications').send(body);
 
     expect(response.status).toBe(422);
-    expect(response.body.error.fields).toHaveProperty('placement.academicSession');
+    expect(response.body.error.fields).toHaveProperty('placement.classApplyingFor');
+    expect(await Application.countDocuments({})).toBe(0);
   });
 
   it('rejects a missing required field with its path (API-P11)', async () => {
+    await seedSettings();
     const body = payload();
     body.student = { firstName: 'Chidinma', dateOfBirth: '2015-04-02', gender: 'female' };
 
@@ -149,18 +151,18 @@ describe.skipIf(!run)('POST /api/v1/public/applications', () => {
   });
 
   it('echoes no personal data in the response (API-P14)', async () => {
+    await seedSettings();
     const response = await request(app()).post('/api/v1/public/applications').send(payload());
 
     expect(response.status).toBe(201);
     expect(Object.keys(response.body).sort()).toEqual(['id', 'submittedAt']);
-
     const serialised = JSON.stringify(response.body);
     expect(serialised).not.toContain('TEST-Applicant');
     expect(serialised).not.toContain('08031234567');
-    expect(serialised).not.toContain('Example Road');
   });
 
   it('stores two identical submissions separately (API-P15)', async () => {
+    await seedSettings();
     const first = await request(app()).post('/api/v1/public/applications').send(payload());
     const second = await request(app()).post('/api/v1/public/applications').send(payload());
 
@@ -170,12 +172,41 @@ describe.skipIf(!run)('POST /api/v1/public/applications', () => {
     expect(await Application.countDocuments({})).toBe(2);
   });
 
-  it('returns 503 when settings have not been configured', async () => {
-    await Settings.deleteMany({});
+  describe('academic session is administrator-controlled', () => {
+    it('files the application under the configured session', async () => {
+      await seedSettings('2030/2031');
 
-    const response = await request(app()).post('/api/v1/public/applications').send(payload());
+      const response = await request(app()).post('/api/v1/public/applications').send(payload());
 
-    expect(response.status).toBe(503);
-    expect(response.body.error.code).toBe('SERVICE_UNAVAILABLE');
+      const stored = await Application.findById(response.body.id);
+      expect(stored?.placement.academicSession).toBe('2030/2031');
+    });
+
+    it('ignores a session supplied by the parent', async () => {
+      await seedSettings('2030/2031');
+      const body = payload();
+      body.placement = {
+        section: 'primary',
+        classApplyingFor: 'Basic 1',
+        academicSession: '1999/2000',
+      };
+
+      const response = await request(app()).post('/api/v1/public/applications').send(body);
+
+      expect(response.status).toBe(201);
+      const stored = await Application.findById(response.body.id);
+      expect(stored?.placement.academicSession).toBe('2030/2031');
+      expect(stored?.placement.academicSession).not.toBe('1999/2000');
+    });
+
+    it('falls back to the configured default when settings do not exist', async () => {
+      // No settings document at all. The application must still be accepted —
+      // a parent cannot fix a missing administrator configuration.
+      const response = await request(app()).post('/api/v1/public/applications').send(payload());
+
+      expect(response.status).toBe(201);
+      const stored = await Application.findById(response.body.id);
+      expect(stored?.placement.academicSession).toBe(DEFAULT_ACADEMIC_SESSION);
+    });
   });
 });

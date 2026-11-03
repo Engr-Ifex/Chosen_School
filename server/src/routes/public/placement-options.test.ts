@@ -1,14 +1,25 @@
 /**
  * `GET /api/v1/public/placement-options` — API_SPEC §2.3.
  *
- * Added as a prerequisite of S04: the form needs the school's class and session
- * lists, and hardcoding them would violate the PRD.
+ * The regression this file exists for: the endpoint used to return **503 until a
+ * `settings` document had been seeded**, which is why a parent saw "we could not
+ * load the list of classes" and an empty dropdown on a fresh deployment. The
+ * class list now comes from `config/school.ts` and does not touch the database.
+ *
+ * Opt-in, because the session lookup still touches MongoDB:
+ *
+ *     RUN_DB_TESTS=1 npm test --workspace server
  */
 
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../app.js';
+import {
+  DEFAULT_ACADEMIC_SESSION,
+  PRIMARY_CLASSES,
+  SECONDARY_CLASSES,
+} from '../../config/school.js';
 import { connectDatabase, disconnectDatabase } from '../../db.js';
 import { createLogger } from '../../logger.js';
 import { SETTINGS_KEY, Settings } from '../../models/settings.js';
@@ -36,28 +47,37 @@ describe.skipIf(!run)('GET /api/v1/public/placement-options', () => {
     await Settings.deleteMany({});
   });
 
-  it('returns the configured lists', async () => {
+  it('returns all fourteen approved classes in order', async () => {
+    const response = await request(app()).get('/api/v1/public/placement-options');
+
+    expect(response.status).toBe(200);
+    expect(response.body.primary).toEqual([...PRIMARY_CLASSES]);
+    expect(response.body.secondary).toEqual([...SECONDARY_CLASSES]);
+    expect(response.body.primary).toHaveLength(8);
+    expect(response.body.secondary).toHaveLength(6);
+  });
+
+  it('works with no settings document at all — the regression', async () => {
+    // Nothing seeded. This previously returned 503 and broke the form.
+    const response = await request(app()).get('/api/v1/public/placement-options');
+
+    expect(response.status).toBe(200);
+    expect(response.body.primary).toHaveLength(8);
+    expect(response.body.currentSession).toBe(DEFAULT_ACADEMIC_SESSION);
+  });
+
+  it('reports the administrator-configured session when one is set', async () => {
     await Settings.create({
       key: SETTINGS_KEY,
       school: { name: 'Placeholder', address: 'Placeholder', phone: '0000000000' },
-      placement: {
-        primaryClasses: ['Primary 1'],
-        secondaryClasses: ['JSS 1'],
-        academicSessions: ['2026/2027'],
-        currentSession: '2026/2027',
-      },
+      placement: { currentSession: '2030/2031' },
       updatedAt: new Date(),
     });
 
     const response = await request(app()).get('/api/v1/public/placement-options');
 
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      primary: ['Primary 1'],
-      secondary: ['JSS 1'],
-      sessions: ['2026/2027'],
-      currentSession: '2026/2027',
-    });
+    expect(response.body.currentSession).toBe('2030/2031');
+    expect(response.body.primary).toHaveLength(8);
   });
 
   it('returns no school contact details or internal identifiers', async () => {
@@ -73,12 +93,5 @@ describe.skipIf(!run)('GET /api/v1/public/placement-options', () => {
     expect(serialised).not.toContain('1 Secret Road');
     expect(serialised).not.toContain('08099999999');
     expect(response.body).not.toHaveProperty('_id');
-  });
-
-  it('returns 503 when settings have not been configured', async () => {
-    const response = await request(app()).get('/api/v1/public/placement-options');
-
-    expect(response.status).toBe(503);
-    expect(response.body.error.code).toBe('SERVICE_UNAVAILABLE');
   });
 });

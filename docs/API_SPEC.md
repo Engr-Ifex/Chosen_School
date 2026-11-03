@@ -174,8 +174,14 @@ anything from `settings` not on that list.
 { "primary": ["..."], "secondary": ["..."], "sessions": ["..."], "currentSession": "..." }
 ```
 
-Populated from `settings`. Values are school-supplied; the API does not contain a hardcoded
-class list.
+Served from the approved school configuration (`server/src/config/school.ts`), **not** from the
+database. The class lists are fixed school data, so this endpoint returns `200` on a deployment
+whose database is empty — it previously returned `503` until a `settings` document had been seeded,
+which left the admission form with an empty dropdown.
+
+`currentSession` and `sessions` are still administrator-controlled and read from `settings`
+best-effort: if the lookup fails, the configured default is returned and the class lists are
+unaffected.
 
 ### 2.4 `GET /public/announcements` and `/public/events`
 

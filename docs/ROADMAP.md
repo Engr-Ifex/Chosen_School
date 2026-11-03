@@ -273,6 +273,26 @@ server would be wrong.
 **Risks / rollback** — The form drifting from the API contract. One Zod schema shared by reference, not duplicated by hand.
 **DoD** — Recorded browser run from empty form to confirmation, and the row visible in the database.
 
+**Correction (3 Nov 2026).** Two defects found after the first implementation.
+
+*The class dropdown was empty.* The list lived in `settings.placement`, and the public
+`GET /public/placement-options` returned **503 until a settings document had been seeded** — so a
+parent on a fresh deployment saw "we could not load the list of classes" and an empty select. The
+approved class list is now fixed school configuration in `server/src/config/school.ts`: eight
+primary classes (PG, KG1, KG2, Basic 1–5) and six secondary (JSS1–JSS3, SS1–SS3), in the school's
+order. The endpoint no longer touches the database for classes, and validation reads the same
+constant, so the frontend and backend cannot disagree. **No seeding is required for the form to
+work.**
+
+*The academic session was asked of the parent.* It is now administrator-controlled: the field is
+gone from the parent form, absent from the Zod schema, and the server assigns it from
+`settings.placement.currentSession`, falling back to `DEFAULT_ACADEMIC_SESSION` when unset. A
+parent-supplied value is dropped at the boundary and could not be honoured if it were not.
+
+**Known gap:** there is no admin screen to change `currentSession` yet. Until that arrives, moving
+the session on means editing the constant or the settings document. Recorded in
+`ARCHITECTURE.md` §15.
+
 ### S05 — Administrator authentication
 **Outcome** — Only an authenticated administrator reaches admin routes; sessions expire and revoke.
 **Covers** — FR-014 to FR-016, FR-036.

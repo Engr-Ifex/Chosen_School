@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CLASSES_BY_SECTION } from '../config/school.js';
 import { admissionInputSchema, toFieldErrors } from './admission.js';
 
 function payload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -16,8 +17,7 @@ function payload(overrides: Record<string, unknown> = {}): Record<string, unknow
     },
     placement: {
       section: 'primary',
-      classApplyingFor: 'Primary 1',
-      academicSession: '2026/2027',
+      classApplyingFor: 'Basic 1',
     },
     signature: { typedName: 'Adeyemi Olu' },
     ...overrides,
@@ -118,5 +118,36 @@ describe('admissionInputSchema', () => {
 
     if (!parsed.success) throw new Error('expected success');
     expect(parsed.data.student.middleName).toBeUndefined();
+  });
+  it('accepts every approved class in its own section', () => {
+    for (const [section, classes] of Object.entries(CLASSES_BY_SECTION)) {
+      for (const className of classes) {
+        const body = payload();
+        body.placement = { section, classApplyingFor: className };
+        const parsed = admissionInputSchema.safeParse(body);
+        expect(parsed.success, `${section}/${className} should be valid`).toBe(true);
+      }
+    }
+  });
+
+  it('rejects an arbitrary class name', () => {
+    const body = payload();
+    body.placement = { section: 'primary', classApplyingFor: 'Year 99' };
+    expect(Object.keys(fieldsOf(body))).toContain('placement.classApplyingFor');
+  });
+
+  it('rejects a class from the other section', () => {
+    const body = payload();
+    body.placement = { section: 'secondary', classApplyingFor: 'Basic 1' };
+    expect(Object.keys(fieldsOf(body))).toContain('placement.classApplyingFor');
+  });
+
+  it('drops a parent-supplied academic session', () => {
+    const body = payload();
+    body.placement = { section: 'primary', classApplyingFor: 'Basic 1', academicSession: '1999/2000' };
+
+    const parsed = admissionInputSchema.safeParse(body);
+    if (!parsed.success) throw new Error('expected success');
+    expect(parsed.data.placement).not.toHaveProperty('academicSession');
   });
 });

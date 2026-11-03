@@ -17,6 +17,7 @@
 
 import { connectDatabase, disconnectDatabase } from '../db.js';
 import { loadConfig } from '../config.js';
+import { DEFAULT_ACADEMIC_SESSION, PRIMARY_CLASSES, SECONDARY_CLASSES } from '../config/school.js';
 import { Application, type Section } from '../models/application.js';
 import { SETTINGS_KEY, Settings } from '../models/settings.js';
 import { createLogger } from '../logger.js';
@@ -26,9 +27,11 @@ const logger = createLogger('info');
 const SEED_MARKER = 'TEST-';
 const APPLICATION_COUNT = 20;
 
-const PLACEHOLDER_PRIMARY = ['PLACEHOLDER-Primary-1', 'PLACEHOLDER-Primary-2'];
-const PLACEHOLDER_SECONDARY = ['PLACEHOLDER-Secondary-1', 'PLACEHOLDER-Secondary-2'];
-const PLACEHOLDER_SESSIONS = ['PLACEHOLDER-SESSION-A'];
+// Real approved class lists — not placeholders. The seed writes them into
+// settings for the admin side; validation reads the constant directly.
+const SEED_PRIMARY = [...PRIMARY_CLASSES];
+const SEED_SECONDARY = [...SECONDARY_CLASSES];
+const SEED_SESSIONS = [DEFAULT_ACADEMIC_SESSION];
 
 function pad(value: number, width: number): string {
   return String(value).padStart(width, '0');
@@ -50,10 +53,10 @@ async function seedSettings(): Promise<void> {
         'school.mapUrl': null,
         social: [],
         'branding.logoKey': null,
-        'placement.primaryClasses': PLACEHOLDER_PRIMARY,
-        'placement.secondaryClasses': PLACEHOLDER_SECONDARY,
-        'placement.academicSessions': PLACEHOLDER_SESSIONS,
-        'placement.currentSession': PLACEHOLDER_SESSIONS[0],
+        'placement.primaryClasses': SEED_PRIMARY,
+        'placement.secondaryClasses': SEED_SECONDARY,
+        'placement.academicSessions': SEED_SESSIONS,
+        'placement.currentSession': SEED_SESSIONS[0],
         updatedAt: now,
         updatedBy: null,
       },
@@ -66,7 +69,7 @@ async function seedSettings(): Promise<void> {
 
 function buildApplication(index: number): Record<string, unknown> {
   const section: Section = index % 2 === 0 ? 'primary' : 'secondary';
-  const classList = section === 'primary' ? PLACEHOLDER_PRIMARY : PLACEHOLDER_SECONDARY;
+  const classList = section === 'primary' ? SEED_PRIMARY : SEED_SECONDARY;
 
   const submittedAt = new Date();
   submittedAt.setDate(submittedAt.getDate() - index);
@@ -95,7 +98,7 @@ function buildApplication(index: number): Record<string, unknown> {
     placement: {
       section,
       classApplyingFor: classList[index % classList.length],
-      academicSession: PLACEHOLDER_SESSIONS[0],
+      academicSession: SEED_SESSIONS[0],
     },
     signature: {
       typedName: `${SEED_MARKER}Guardian ${pad(index + 1, 2)}`,

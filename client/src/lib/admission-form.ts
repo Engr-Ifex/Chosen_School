@@ -38,9 +38,10 @@ export interface AdmissionFormValues {
   occupation: string;
   officeAddress: string;
   // Placement
+  // The academic session is deliberately not here: it is set by the school
+  // administrator on the server and is never shown to, or supplied by, a parent.
   section: Section | '';
   classApplyingFor: string;
-  academicSession: string;
   // Signature and optional detail
   typedName: string;
   healthInformation: string;
@@ -65,7 +66,6 @@ export const EMPTY_FORM: AdmissionFormValues = {
   officeAddress: '',
   section: '',
   classApplyingFor: '',
-  academicSession: '',
   typedName: '',
   healthInformation: '',
 };
@@ -81,7 +81,6 @@ export const REQUIRED_FIELDS: Array<keyof AdmissionFormValues> = [
   'phone',
   'section',
   'classApplyingFor',
-  'academicSession',
   'typedName',
 ];
 
@@ -105,7 +104,6 @@ export const FIELD_PATHS: Record<string, string> = {
   officeAddress: 'guardian.officeAddress',
   section: 'placement.section',
   classApplyingFor: 'placement.classApplyingFor',
-  academicSession: 'placement.academicSession',
   typedName: 'signature.typedName',
   healthInformation: 'healthInformation',
 };
@@ -166,7 +164,6 @@ export function toPayload(values: AdmissionFormValues): Record<string, unknown> 
     placement: {
       section: values.section,
       classApplyingFor: values.classApplyingFor,
-      academicSession: values.academicSession,
     },
     signature: {
       typedName: values.typedName.trim(),

@@ -65,8 +65,8 @@ Verified on **28 October 2026**:
 |---|---|---|
 | Install | `npm install` | 157 packages, 0 vulnerabilities |
 | Development | `npm run dev` (client, `:5173`) · `npm run dev:server` (API) | Client served `HTTP 200` |
-| Tests | `npm test` | 68 tests in 10 files — 54 pass, 14 skipped (database integration, opt-in) |
-| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | 68 pass, requires a `mongod` binary |
+| Tests | `npm test` | 122 tests in 15 files — 101 pass, 21 skipped (database integration, opt-in) |
+| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | 93 pass, requires a `mongod` binary |
 | Seed | `npm run seed --workspace server` | 20 synthetic applications; refuses in production |
 | Indexes | `npm run sync-indexes --workspace server` | Creates declared indexes; `autoIndex` is off by design |
 | Lint | `npm run lint` | 0 problems |

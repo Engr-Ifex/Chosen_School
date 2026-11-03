@@ -20,8 +20,8 @@ vi.mock('../lib/api', () => ({
 }));
 
 const OPTIONS: api.PlacementOptions = {
-  primary: ['Primary 1', 'Primary 2'],
-  secondary: ['JSS 1'],
+  primary: ['PG', 'KG1', 'Basic 1'],
+  secondary: ['JSS1', 'SS3'],
   sessions: ['2026/2027'],
   currentSession: '2026/2027',
 };
@@ -58,7 +58,7 @@ function fillRequiredFields() {
   });
   fireEvent.click(screen.getByLabelText('Primary'));
   fireEvent.change(screen.getByLabelText(/class applying for \(required\)/i), {
-    target: { value: 'Primary 1' },
+    target: { value: 'Basic 1' },
   });
   fireEvent.change(screen.getByLabelText(/type your full name \(required\)/i), {
     target: { value: 'Nwosu Peter' },
@@ -157,16 +157,16 @@ describe('Admissions form', () => {
 
     fireEvent.click(screen.getByLabelText('Primary'));
     await waitFor(() => {
-      expect(screen.getByRole('option', { name: 'Primary 1' })).toBeTruthy();
+      expect(screen.getByRole('option', { name: 'Basic 1' })).toBeTruthy();
     });
-    expect(screen.queryByRole('option', { name: 'JSS 1' })).toBeNull();
+    expect(screen.queryByRole('option', { name: 'JSS1' })).toBeNull();
 
     // Switching section clears the class chosen from the other list.
-    fireEvent.change(classSelect, { target: { value: 'Primary 1' } });
+    fireEvent.change(classSelect, { target: { value: 'Basic 1' } });
     fireEvent.click(screen.getByLabelText('Secondary'));
 
     await waitFor(() => {
-      expect(screen.getByRole('option', { name: 'JSS 1' })).toBeTruthy();
+      expect(screen.getByRole('option', { name: 'JSS1' })).toBeTruthy();
     });
     expect((screen.getByLabelText(/class applying for \(required\)/i) as HTMLSelectElement).value).toBe(
       '',
@@ -210,6 +210,27 @@ describe('Admissions form', () => {
     resolveSubmit({ ok: true, id: 'x', submittedAt: '2026-11-02T15:00:00.000Z' });
     await waitFor(() => {
       expect(screen.getByText(SUBMISSION_SUCCESS_MESSAGE)).toBeTruthy();
+    });
+  });
+  it('does not ask the parent for an academic session', async () => {
+    renderPage();
+    await screen.findByLabelText(/surname \(required\)/i);
+
+    expect(screen.queryByLabelText(/academic session/i)).toBeNull();
+    expect(screen.queryByText(/academic session/i)).toBeNull();
+  });
+
+  it('offers a retry when the class list genuinely fails to load', async () => {
+    vi.mocked(api.fetchPlacementOptions).mockResolvedValueOnce(null);
+
+    renderPage();
+    await screen.findByText(/we could not load the list of classes/i);
+
+    vi.mocked(api.fetchPlacementOptions).mockResolvedValue(OPTIONS);
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByText(/we could not load the list of classes/i)).toBeNull();
     });
   });
 });

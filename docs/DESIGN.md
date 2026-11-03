@@ -222,6 +222,10 @@ Use a short introduction followed by a single-page form with visually separated 
 4. Any approved optional details, such as student photo and relevant health information, with clear optional labels and privacy context
 5. Parent/guardian typed-name signature, if confirmed as required by school policy
 
+**The academic session is not shown to the parent.** It is set by the school administrator and
+applied by the server, so the form does not ask which session an application belongs to — a parent
+cannot know, and asking invites a guess. Corrected 3 November 2026.
+
 The section choice controls which classes are available. Mark required fields clearly and in text, not just with colour or an asterisk. Use appropriate input types, date controls and phone input guidance. On mobile, fields stack in one column; on wider screens, related low-risk fields may share a row. Avoid multi-column layouts that make form order confusing.
 
 Do not add an application draft/save-for-later feature or public status tracking. Do not block similar submissions automatically.

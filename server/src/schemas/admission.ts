@@ -18,6 +18,7 @@
  */
 
 import { z } from 'zod';
+import { isValidClassForSection } from '../config/school.js';
 import { PHONE_PATTERN } from '../lib/phone.js';
 
 /** Treats "" as "not supplied" so an empty form field is not stored as a value. */
@@ -78,11 +79,29 @@ const guardianSchema = z.object({
   officeAddress: optionalText(300),
 });
 
-const placementSchema = z.object({
-  section: z.enum(['primary', 'secondary'], { message: 'Section must be primary or secondary' }),
-  classApplyingFor: requiredText(60, 'Class applying for'),
-  academicSession: requiredText(40, 'Academic session'),
-});
+/**
+ * `academicSession` is deliberately **absent**. The session is administrator-
+ * controlled: the server assigns it from configuration. A parent-supplied value
+ * would be dropped by this schema anyway, and the service sets the real one.
+ *
+ * The class is checked against the approved list for the chosen section here,
+ * at the boundary, so the error carries the right field path for the form.
+ */
+const placementSchema = z
+  .object({
+    section: z.enum(['primary', 'secondary'], { message: 'Section must be primary or secondary' }),
+    classApplyingFor: requiredText(60, 'Class applying for'),
+  })
+  .superRefine((value, ctx) => {
+    if (value.section !== 'primary' && value.section !== 'secondary') return;
+    if (!isValidClassForSection(value.section, value.classApplyingFor)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['classApplyingFor'],
+        message: `is not a class offered in the ${value.section} section`,
+      });
+    }
+  });
 
 const signatureSchema = z.object({
   // `signedAt` is deliberately absent: the server sets it. A client value is

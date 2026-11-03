@@ -8,15 +8,15 @@ import {
   toPayload,
 } from './admission-form';
 
-const OPTIONS = { primary: ['Primary 1'], secondary: ['JSS 1'] };
+const OPTIONS = { primary: ['Basic 1'], secondary: ['JSS1'] };
 
 describe('classesForSection', () => {
   it('returns the primary list for primary', () => {
-    expect(classesForSection('primary', OPTIONS)).toEqual(['Primary 1']);
+    expect(classesForSection('primary', OPTIONS)).toEqual(['Basic 1']);
   });
 
   it('returns the secondary list for secondary', () => {
-    expect(classesForSection('secondary', OPTIONS)).toEqual(['JSS 1']);
+    expect(classesForSection('secondary', OPTIONS)).toEqual(['JSS1']);
   });
 
   it('returns nothing until a section is chosen', () => {
@@ -40,14 +40,13 @@ describe('toPayload', () => {
       homeAddress: '12 Test Close',
       phone: '08035551234',
       section: 'primary',
-      classApplyingFor: 'Primary 1',
-      academicSession: '2026/2027',
+      classApplyingFor: 'Basic 1',
       typedName: 'Nwosu Peter',
     }) as Record<string, Record<string, unknown>>;
 
     expect(payload.student).toMatchObject({ surname: 'Nwosu', firstName: 'Amara' });
     expect(payload.guardian).toMatchObject({ name: 'Nwosu Peter', phone: '08035551234' });
-    expect(payload.placement).toMatchObject({ section: 'primary', classApplyingFor: 'Primary 1' });
+    expect(payload.placement).toMatchObject({ section: 'primary', classApplyingFor: 'Basic 1' });
     expect(payload.signature).toMatchObject({ typedName: 'Nwosu Peter' });
   });
 

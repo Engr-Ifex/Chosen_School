@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Container } from '../components/ui/Container';
@@ -41,26 +41,29 @@ export default function Admissions() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [loadingOptions, setLoadingOptions] = useState(true);
 
   const summaryRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    void fetchPlacementOptions().then((result) => {
-      if (cancelled) return;
-      if (result) {
-        setOptions(result);
-        if (result.currentSession) {
-          setValues((current) => ({ ...current, academicSession: result.currentSession ?? '' }));
-        }
-      } else {
-        setOptionsFailed(true);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
+  /**
+   * Reusable so the failure banner can offer a genuine retry rather than
+   * telling the parent to refresh the whole page and lose what they typed.
+   */
+  const loadOptions = useCallback(async () => {
+    setLoadingOptions(true);
+    const result = await fetchPlacementOptions();
+    if (result) {
+      setOptions(result);
+      setOptionsFailed(false);
+    } else {
+      setOptionsFailed(true);
+    }
+    setLoadingOptions(false);
   }, []);
+
+  useEffect(() => {
+    void loadOptions();
+  }, [loadOptions]);
 
   const classes = useMemo(
     () => classesForSection(values.section, options),
@@ -173,10 +176,21 @@ export default function Admissions() {
         </p>
 
         {optionsFailed && (
-          <div role="alert" className="mt-6 rounded-[var(--radius-card)] border border-warning/30 bg-warning-soft p-4">
+          <div
+            role="alert"
+            className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-card)] border border-warning/30 bg-warning-soft p-4"
+          >
             <p className="text-sm font-medium text-warning">
-              We could not load the list of classes. Please refresh the page, or try again later.
+              We could not load the list of classes. Check your connection and try again.
             </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void loadOptions()}
+              disabled={loadingOptions}
+            >
+              {loadingOptions ? 'Trying…' : 'Try again'}
+            </Button>
           </div>
         )}
 
@@ -395,15 +409,11 @@ export default function Admissions() {
               hint="The list depends on the section you choose."
             />
 
-            <Select
-              id={idFor('academicSession')}
-              label="Academic session (required)"
-              value={values.academicSession}
-              onChange={(e) => setField('academicSession', e.target.value)}
-              error={errorFor('academicSession')}
-              placeholder="Select…"
-              options={(options?.sessions ?? []).map((name) => ({ value: name, label: name }))}
-            />
+            {/*
+              The academic session is deliberately absent. It is set by the
+              school administrator, not chosen by the parent — asking a parent
+              which session their child belongs to invites them to guess.
+            */}
           </fieldset>
 
           <fieldset className="space-y-5">

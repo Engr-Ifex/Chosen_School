@@ -501,6 +501,13 @@ a unique index on `key` prevents a second document from existing.
 | `placement.currentSession` | String \| null | Default for the public form |
 | `updatedAt` / `updatedBy` | | |
 
+**Superseded for classes (S04 correction, 3 Nov 2026).** `primaryClasses` and `secondaryClasses`
+are no longer read for validation or for the public form. The approved class list is fixed school
+data in `server/src/config/school.ts`, so the admission form works before anything is seeded. The
+fields remain in the schema to avoid a data migration and are still written by the seed; remove
+them in a future schema change. `academicSessions` / `currentSession` remain administrator-
+controlled and are still read.
+
 **Why placement options live here:** `discovery.md` leaves the class list and academic session
 naming open, and the PRD forbids inventing them. Storing them as admin-managed data means the
 form can be correct without hardcoding a single class name. The server validates submissions
