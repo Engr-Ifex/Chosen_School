@@ -56,6 +56,23 @@ const absoluteUrl = z.string().refine(
   { message: 'must be an absolute http(s) URL with no trailing slash' },
 );
 
+/**
+ * The hostname from a `mongodb://` or `mongodb+srv://` URI.
+ *
+ * Credentials are stripped and only the first host of a replica set is used, so
+ * the result is safe to log. Returns `null` if no host can be found.
+ *
+ * Used for the startup log that names the database actually in use — it makes
+ * no decision about which database is allowed.
+ */
+export function mongoHost(uri: string): string | null {
+  const withoutScheme = uri.replace(/^mongodb(\+srv)?:\/\//, '');
+  const authority = withoutScheme.split('/')[0] ?? '';
+  const afterCredentials = authority.slice(authority.lastIndexOf('@') + 1);
+  const host = afterCredentials.split(',')[0]?.split(':')[0]?.trim() ?? '';
+  return host === '' ? null : host;
+}
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(10000),

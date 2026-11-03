@@ -39,6 +39,9 @@ export default function Admissions() {
   const [optionsFailed, setOptionsFailed] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(true);
@@ -91,6 +94,32 @@ export default function Admissions() {
   const errorFor = (field: keyof AdmissionFormValues): string | undefined =>
     errors[pathFor(field)];
 
+  /** 5 MB, matching the server. This is a courtesy check, not a control. */
+  const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+
+  function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoError(null);
+
+    if (!file) {
+      setPhoto(null);
+      setPhotoPreview(null);
+      return;
+    }
+
+    if (file.size > MAX_PHOTO_BYTES) {
+      setPhotoError('That photo is larger than 5 MB. Please choose a smaller one.');
+      setPhoto(null);
+      setPhotoPreview(null);
+      return;
+    }
+
+    setPhoto(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  }
+
   function missingRequired(): FieldErrors {
     const found: FieldErrors = {};
     for (const field of REQUIRED_FIELDS) {
@@ -117,7 +146,7 @@ export default function Admissions() {
     }
 
     setSubmitting(true);
-    const result = await submitApplication(toPayload(values));
+    const result = await submitApplication(toPayload(values), photo);
     setSubmitting(false);
 
     if (result.ok) {
@@ -420,6 +449,31 @@ export default function Admissions() {
             <legend className="text-lg font-semibold text-brand-dark">
               Additional information
             </legend>
+
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="field-photo" className="text-sm font-medium text-ink">
+                Photograph of the student
+              </label>
+              <input
+                id="field-photo"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handlePhotoChange}
+                className="text-sm text-ink file:mr-3 file:rounded-[var(--radius-control)] file:border-0 file:bg-brand-soft file:px-4 file:py-2 file:text-sm file:font-medium file:text-brand-dark"
+              />
+              <p className="text-sm text-muted">
+                Optional. JPEG, PNG or WebP, up to 5 MB. Stored privately — only the school
+                administrator can see it.
+              </p>
+              {photoError && <p className="text-sm font-medium text-danger">{photoError}</p>}
+              {photoPreview && (
+                <img
+                  src={photoPreview}
+                  alt="Preview of the selected photograph"
+                  className="mt-1 h-28 w-28 rounded-[var(--radius-control)] border border-line object-cover"
+                />
+              )}
+            </div>
 
             <Textarea
               id={idFor('healthInformation')}

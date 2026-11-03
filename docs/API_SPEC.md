@@ -222,6 +222,16 @@ The most security-sensitive public endpoint.
 
 Sent as `multipart/form-data` when a photo is attached, `application/json` otherwise.
 
+For the multipart form the parts are exactly:
+
+| Part | Content |
+|---|---|
+| `payload` | The JSON object above, as a string |
+| `photo` | The image file |
+
+The filename and declared MIME type are ignored — the type is decided by magic bytes and the file is
+re-encoded, so neither can influence what is stored.
+
 **Server-side rules:**
 - `placement.classApplyingFor` must belong to the selected section's list from `settings`.
   A class from the wrong section is a `VALIDATION_ERROR`.

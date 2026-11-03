@@ -18,6 +18,8 @@
 
 import { isValidClassForSection, resolveAcademicSession } from '../config/school.js';
 import { AppError } from '../errors.js';
+import { getStorage } from '../lib/storage/index.js';
+import { newPhotoKey, processPhoto } from './uploads.js';
 import { createLogger } from '../logger.js';
 import { Application } from '../models/application.js';
 import { SETTINGS_KEY, Settings } from '../models/settings.js';
@@ -50,11 +52,18 @@ async function resolveSession(): Promise<string> {
   }
 }
 
+export interface SubmitOptions {
+  /** Raw uploaded bytes. Validated and re-encoded here, never stored as given. */
+  photo?: Buffer;
+  /** Injectable so tests can assert the server-set timestamp exactly. */
+  now?: Date;
+}
+
 export async function submitApplication(
   input: AdmissionInput,
-  /** Injectable so tests can assert the server-set timestamp exactly. */
-  now: Date = new Date(),
+  options: SubmitOptions = {},
 ): Promise<SubmittedApplication> {
+  const { photo, now = new Date() } = options;
   // Defence in depth. Zod has already rejected an unknown class at the
   // boundary; this guard means a direct call cannot bypass it either.
   if (!isValidClassForSection(input.placement.section, input.placement.classApplyingFor)) {
@@ -65,6 +74,34 @@ export async function submitApplication(
 
   const academicSession = await resolveSession();
 
+  // The photo is processed and stored before the document is written, so a
+  // rejected image never produces a record. If the save then fails, the stored
+  // object is removed again — otherwise a retry would leave an orphan file that
+  // nothing references.
+  let stored: {
+    key: string;
+    contentType: string;
+    width: number;
+    height: number;
+    bytes: number;
+    uploadedAt: Date;
+  } | null = null;
+
+  if (photo) {
+    const processed = await processPhoto(photo);
+    const key = newPhotoKey();
+    await getStorage().put(key, processed.data, processed.contentType);
+
+    stored = {
+      key,
+      contentType: processed.contentType,
+      width: processed.width,
+      height: processed.height,
+      bytes: processed.bytes,
+      uploadedAt: now,
+    };
+  }
+
   const document = new Application({
     ...input,
     placement: {
@@ -74,13 +111,25 @@ export async function submitApplication(
       academicSession,
     },
     signature: { typedName: input.signature.typedName, signedAt: now },
+    photo: stored,
     submittedAt: now,
     revisions: [],
     deletedAt: null,
     deletedBy: null,
   });
 
-  const saved = await document.save();
-
-  return { id: saved._id.toString(), submittedAt: saved.submittedAt };
+  try {
+    const saved = await document.save();
+    return { id: saved._id.toString(), submittedAt: saved.submittedAt };
+  } catch (error) {
+    if (stored) {
+      await getStorage()
+        .remove(stored.key)
+        .catch(() => {
+          // Best effort: the record was not written, so a leftover object is
+          // unreferenced rather than a privacy problem. Never mask the original.
+        });
+    }
+    throw error;
+  }
 }

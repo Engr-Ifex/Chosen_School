@@ -2,7 +2,12 @@
 .env
 .env.*
 !.env.example
+# Local overrides with no secrets — committed so a fresh clone works.
+!.env.development
 .env.backup
+
+# Uploaded photographs (local storage driver) — private, never committed
+server/.storage/
 
 # Backup artifacts must never be committed — they contain personal data
 backups/

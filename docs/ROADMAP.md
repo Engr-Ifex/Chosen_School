@@ -384,7 +384,36 @@ behind it implies a broken feature rather than an absent one.
 **Risks / rollback** — If T1 fails, the cookie strategy changes (ADR-016) and `SESSION_COOKIE_NAME` may lose the `__Host-` prefix. Record the failure and the decision; do not quietly relax `Secure`.
 **DoD** — Results table filled in with real numbers, pass or fail, and a recorded decision if it fails.
 
+**Status 3 Nov 2026 — BLOCKED at the gate. Nothing deployed, nothing verified.**
+No Vercel or Render account exists, so T1 to T4 cannot run. The rewrite itself is already written
+(`client/vercel.json` → `chosen-school.onrender.com`); what is missing is the deployment and the
+Safari devices.
+
+Two findings from the preparation work, both worth acting on:
+
+**1. `server/.env` is a production configuration being used for local development.** It holds
+`NODE_ENV=production`, `PORT=10000`, a `mongodb+srv://` Atlas URI and an `https` `APP_ORIGIN` that
+is not localhost. Consequences: `npm run dev:server` runs the app in production mode against the
+**production database**, and every mutating request from `http://localhost:5173` is rejected by the
+origin check with `403`. Local administrator sign-in therefore cannot work with the current file,
+and the `provision-admin` guard refuses for the same reason. A separate local configuration (or an
+explicit inline override) is needed before admin work can be exercised locally. This is a workflow
+defect, not a code defect — but it will be hit by anyone who tries.
+
+**2. A `__Host-` cookie is accepted over plain `http://localhost` in Chromium.** Verified in a real
+browser: the cookie was stored with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`, domain
+`localhost`, and the following authenticated request returned `200`. So local development does not
+need to drop the prefix or relax `Secure` — the suspected blocker for using the production cookie
+name locally does not exist. This does **not** answer T1, which is about the Vercel origin over
+https and about Safari; it only removes a false obstacle.
+
+**Decision still open:** whether to deploy the throwaway spike as written above, or deploy the real
+application (which now contains working authentication) and run T1 to T4 against it. The second is
+closer to the real system and needs no extra surface; the first isolates a cookie failure from an
+application failure.
+
 ### S08 — Photo upload via storage adapter
+**Status:** Complete — 3 November 2026
 **Outcome** — An optional photograph is accepted safely, stored privately, and visible only to the administrator.
 **Covers** — FR-012, FR-019.
 **Depends on** — S06.
@@ -397,6 +426,27 @@ behind it implies a broken feature rather than an absent one.
 **Verify** — F-01 to F-09, F-10 (local equivalent).
 **Risks / rollback** — Native `sharp` build failure. Pin the version; if it will not build on the target, that is an S14 blocker to raise, not to work around.
 **DoD** — Upload a JPEG with GPS data, then confirm the stored file has neither EXIF nor GPS.
+
+**Completion note (3 Nov 2026).** The storage interface (`lib/storage/`) has one local driver writing
+to `server/.storage`, outside any served directory. Uploads are validated by magic bytes, re-encoded
+to WebP by `sharp`, and stored under a UUID key. `GET /admin/applications/:id/photo` streams the file
+with `private, no-store` and `nosniff`; there is no presigned URL and no redirect anywhere.
+
+**`sharp` 0.35.5 (libvips 8.18.7) installed from prebuilt binaries** — no node-gyp, so the risk
+recorded for this slice did not materialise. That closes the S14 build question for image
+processing, though it is still unproven on Render's image.
+
+**The DoD was performed literally.** A JPEG carrying a GPS block and a copyright marker was posted
+to the real endpoint; the file that appeared on disk was WebP, 900×700, with **no EXIF**, no GPS
+strings anywhere in the bytes, and a UUID filename. 1222 bytes from a 4747-byte original.
+
+**Verification:** F-01 to F-10 pass — polyglot and SVG rejected `415`, oversized rejected `413`,
+animated GIF rejected, EXIF and GPS stripped, a 3200 px image downscaled to ≤1600, unauthenticated
+photo access `401`, distinct keys for repeat filenames.
+
+**One contract detail the spec left open:** API_SPEC §2.6 described the photo as a "multipart part"
+without naming the fields. The multipart body is now `payload` (the JSON, as a string) plus `photo`
+(the file). The JSON path is unchanged, so a submission without a photo is byte-for-byte as before.
 
 ### S09 — Trash, restore, permanent delete
 **Outcome** — Records can be removed recoverably, and deleted irreversibly only with explicit confirmation.

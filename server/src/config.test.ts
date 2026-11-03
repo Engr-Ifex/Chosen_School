@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ConfigError, loadConfig } from './config.js';
+import { ConfigError, loadConfig, mongoHost } from './config.js';
 
 /** A minimal environment that should be accepted. */
 const valid: NodeJS.ProcessEnv = {
@@ -93,5 +93,27 @@ describe('loadConfig', () => {
 
     expect(config.nodeEnv).toBe('production');
     expect(config.sessionCookieName).toBe('__Host-cs_session');
+  });
+});
+
+describe('mongoHost', () => {
+  it('extracts a plain host', () => {
+    expect(mongoHost('mongodb://127.0.0.1:27017/db')).toBe('127.0.0.1');
+  });
+
+  it('extracts an srv host', () => {
+    expect(mongoHost('mongodb+srv://cluster0.example.net/db')).toBe('cluster0.example.net');
+  });
+
+  it('strips credentials', () => {
+    expect(mongoHost('mongodb+srv://user:p%40ss@cluster0.example.net/db')).toBe('cluster0.example.net');
+  });
+
+  it('takes the first host of a replica set', () => {
+    expect(mongoHost('mongodb://a.example:27017,b.example:27017/db')).toBe('a.example');
+  });
+
+  it('returns null when there is no host', () => {
+    expect(mongoHost('mongodb://')).toBeNull();
   });
 });

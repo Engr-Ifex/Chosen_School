@@ -100,14 +100,37 @@ separate backup project preserves the separation. This is **D-12**, still awaiti
 | `APP_ORIGIN` | `http://localhost:5173` | Preview URL | Production URL |
 | `TRUST_PROXY_HOPS` | `0` | `2` (verify) | `2` (verify) |
 | `VITE_API_BASE_URL` | `/api/v1` (Vite dev proxy) | `/api/v1` | `/api/v1` |
+| `ALLOW_REMOTE_DEV_DB` | `false` | `false` | not used |
 | Supabase variables | Local storage stub, or a dev bucket in a spare project | — | Application project |
 
-**Local development does not require any provider account.** MongoDB runs locally, and storage is
-accessed through an interface with a local-filesystem implementation. This is what allows
-implementation to proceed before your accounts exist — see `ROADMAP.md`.
+### 5.1 Which file, and when
 
-**The browser never receives a Supabase variable.** It fetches gallery images from absolute public
-URLs returned by the API, and streams private files through the API. There is no `VITE_SUPABASE_*`.
+| Where | Files | Loaded by |
+|---|---|---|
+| Local development | `server/.env` then `server/.env.development` | `npm run dev:server` |
+| Local database operations | `server/.env` only | `seed`, `sync-indexes`, `provision-admin` |
+| Production | **no file** | `npm start` = `node dist/index.js`; Render supplies the environment |
+| Deployment register | `.env.example` (root) | nothing — it documents the Render and Vercel variables |
+
+`server/.env.development` contains **only** `NODE_ENV=development` and
+`APP_ORIGIN=http://localhost:5173`. It holds no secrets, so it is committed. Node applies later
+`--env-file` flags over earlier ones, which is what makes this a two-line override rather than a
+second configuration file to keep in sync.
+
+`server/.env` is gitignored along with `.env.*`, except `.env.development`.
+
+### 5.2 Development and production share one Atlas database
+
+`MONGODB_DB_NAME` is the same locally as in production, so **local work reads and writes live
+school data**. That is a deliberate choice, not an oversight: it keeps one database and one set of
+credentials. The trade-off is that a mistaken `seed` or `deleteMany` run locally reaches real
+records.
+
+Mitigations that exist today: `seed` refuses to run when `NODE_ENV=production`; `provision-admin`
+refuses the same; `npm run dev:server` sets `NODE_ENV=development` but the database is unchanged.
+
+**To confirm which database a running process is on**, read the `database_connected` log line — it
+carries `host`, `database` and `environment`, and never a credential.
 
 ---
 

@@ -6,7 +6,7 @@ Instructions for any AI agent working in this repository. Short by design — de
 
 ## 1. Repository state — read this first
 
-**Authentication exists; the product does not.** ROADMAP slices S00–S05 are complete:/n`GET /api/v1/health`, `POST /api/v1/public/applications`, configuration validation, the error
+**Authentication and uploads exist; the product does not.** ROADMAP slices S00–S06 and S08 are complete:/n`GET /api/v1/health`, `POST /api/v1/public/applications`, configuration validation, the error
 envelope, request logging, four Mongoose models with a synthetic seed. There are no admin routes,
 no authentication and no real pages yet.
 
@@ -65,8 +65,8 @@ Verified on **28 October 2026**:
 |---|---|---|
 | Install | `npm install` | 157 packages, 0 vulnerabilities |
 | Development | `npm run dev` (client, `:5173`) · `npm run dev:server` (API) | Client served `HTTP 200` |
-| Tests | `npm test` | 178 tests in 22 files — 125 pass, 53 skipped (database integration, opt-in) |
-| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | 142 pass, requires a `mongod` binary |
+| Tests | `npm test` | 220 tests in 25 files — 158 pass, 62 skipped (database integration, opt-in) |
+| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | 184 pass, requires a `mongod` binary |
 | Admin account | `ADMIN_EMAIL=... npm run provision-admin --workspace server` | Creates or rotates the single admin; deletes all sessions on rotation |
 | Seed | `npm run seed --workspace server` | 20 synthetic applications; refuses in production |
 | Indexes | `npm run sync-indexes --workspace server` | Creates declared indexes; `autoIndex` is off by design |
@@ -78,6 +78,16 @@ Verified on **28 October 2026**:
 (`SAFE_DELETE_BULK_CONFIRM_REQUIRED`, 51 targets against a threshold of 50) and the partial
 deletion had to be repaired with `npm install`. `npm ci --dry-run` resolves the lockfile without
 error. Confirm it on CI or a clean machine before depending on it.
+
+**`server/.env` holds the real configuration; `server/.env.development` overrides two values.**
+`npm run dev:server` loads `--env-file=.env --env-file=.env.development`; Node applies later files
+over earlier ones, so development gets `NODE_ENV=development` and `APP_ORIGIN=http://localhost:5173`
+while Atlas, Supabase, the buckets and the port still come from `server/.env`. That file is never
+rewritten by development. Production reads no file at all: `npm start` is `node dist/index.js` and
+Render supplies everything.
+
+**`seed`, `sync-indexes` and `provision-admin` load `.env` only.** They are database operations, and
+`provision-admin` relies on seeing `NODE_ENV=production` to refuse a careless run.
 
 **Three conventions that will bite if forgotten:**
 

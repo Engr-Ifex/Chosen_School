@@ -13,6 +13,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { AppError } from '../../errors.js';
+import { getStorage } from '../../lib/storage/index.js';
 import { Application } from '../../models/application.js';
 
 /** Sortable fields. Anything else is a `VALIDATION_ERROR`, never a fallback. */
@@ -161,6 +162,44 @@ export function adminApplicationsRouter(): Router {
         totalPages: Math.max(1, Math.ceil(total / pageSize)),
       },
     });
+  });
+
+  /**
+   * Streams the private photograph — API_SPEC §4.2.
+   *
+   * Never a redirect and never a presigned URL: both would hand out a link that
+   * keeps working after the session ends. The bytes pass through the same
+   * session check as every other admin route, and `no-store` stops the browser
+   * or a proxy keeping a copy.
+   */
+  router.get('/applications/:id/photo', async (req, res) => {
+    const { id } = req.params;
+
+    if (!/^[0-9a-fA-F]{24}$/.test(id)) {
+      throw new AppError('VALIDATION_ERROR', 'That application id is not valid.', {
+        id: 'must be a 24-character identifier',
+      });
+    }
+
+    const doc = await Application.findById(id).select('photo').lean();
+
+    if (!doc || !doc.photo?.key) {
+      throw new AppError('NOT_FOUND', 'That application has no photograph.');
+    }
+
+    const object = await getStorage().get(doc.photo.key);
+
+    if (!object) {
+      // The record points at a file that is gone. Report it as missing rather
+      // than inventing an image or leaking the key.
+      throw new AppError('NOT_FOUND', 'That application has no photograph.');
+    }
+
+    res.setHeader('Content-Type', object.contentType);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', 'inline; filename="photo.webp"');
+    res.send(object.data);
   });
 
   router.get('/applications/:id', async (req, res) => {

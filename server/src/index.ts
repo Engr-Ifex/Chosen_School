@@ -8,7 +8,7 @@
 
 import type { Server } from 'node:http';
 import { createApp } from './app.js';
-import { ConfigError, describePresence, loadConfig, type Config } from './config.js';
+import { ConfigError, describePresence, loadConfig, mongoHost, type Config } from './config.js';
 import { connectDatabase, disconnectDatabase } from './db.js';
 import { createLogger } from './logger.js';
 
@@ -53,7 +53,13 @@ async function main(): Promise<void> {
   // database is not.
   try {
     await connectDatabase(config.mongoUri, config.mongoDbName);
-    logger.info('database_connected');
+    // Host and database name, never the credentials. This line is how you
+    // confirm which database a running process is actually on.
+    logger.info('database_connected', {
+      host: mongoHost(config.mongoUri) ?? 'unknown',
+      database: config.mongoDbName,
+      environment: config.nodeEnv,
+    });
   } catch (error) {
     logger.error('database_connection_failed', {
       error: error instanceof Error ? error.message : String(error),

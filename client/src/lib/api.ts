@@ -59,15 +59,34 @@ async function request(path: string, init: RequestInit): Promise<Response> {
   }
 }
 
-export async function submitApplication(body: unknown): Promise<SubmitResult> {
+
+/** Builds the multipart body the API expects when a photo is attached. */
+function buildMultipart(body: unknown, photo: File): FormData {
+  const form = new FormData();
+  form.append('payload', JSON.stringify(body));
+  form.append('photo', photo);
+  return form;
+}
+
+export async function submitApplication(
+  body: unknown,
+  photo?: File | null,
+): Promise<SubmitResult> {
   let response: Response;
 
   try {
-    response = await request('/public/applications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    // A photo switches the request to multipart: the JSON fields travel as a
+    // `payload` part and the file as `photo`. The Content-Type header is
+    // deliberately not set — the browser must add its own boundary.
+    const init: RequestInit = photo
+      ? { method: 'POST', body: buildMultipart(body, photo) }
+      : {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        };
+
+    response = await request('/public/applications', init);
   } catch {
     // Network failure or abort. We cannot know whether the request arrived.
     return {
