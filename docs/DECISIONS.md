@@ -45,6 +45,7 @@
 | ADR-029 | Security control baseline (`SECURITY.md` §20) | Accepted |
 | ADR-030 | School information as fixed structured fields (Q13) | Accepted |
 | ADR-031 | Admission form field baseline (D-01, D-02) | Accepted |
+| ADR-033 | Rate-limit counters stored in Atlas | Accepted |
 | ADR-032 | Supabase Storage replaces Cloudflare R2 | Accepted |
 
 ---
@@ -637,3 +638,28 @@ page, editable in the dashboard but not addable, removable or reorderable. `sett
 hold contact details, social links, branding and placement lists; `pagecontents` holds the
 long-form page text. The school's actual content is still outstanding — that is a content task,
 not a decision.
+
+---
+
+### ADR-033 — Rate-limit counters stored in Atlas
+**Status:** Accepted · **Date:** 2026-11-03 · **Depends on:** ADR-018
+
+**Context.** `ARCHITECTURE.md` §7.5 requires rate-limit counters to live in Atlas rather than
+process memory, because Render may restart the process at any time and silently reset in-memory
+limits. No collection was ever defined for them, so S05 could not implement login rate limiting
+without inventing storage.
+
+**Proposal.** A `ratelimits` collection holding one document per counter key, with a TTL index on
+`expiresAt`. Keys are namespaced strings — `login:ip:<ip>` and `login:email:<email>` — so a single
+collection serves every surface listed in §7.5 without a schema change per surface.
+
+**Consequences.** Counters survive a restart and are shared by every instance, which is the whole
+point. The cost is a database write per failed login attempt and one read per attempt; at this
+scale that is negligible. The TTL index is housekeeping only — the window is enforced by comparing
+`windowStart`, never by relying on the TTL monitor, for the same reason sessions do not.
+
+**Rejected:** process memory (resets on restart, and multiple instances would each keep their own
+count); counting only on the `admins` document (gives no per-IP limit and cannot count attempts
+against an email that does not exist, which is exactly the enumeration case worth limiting).
+
+---

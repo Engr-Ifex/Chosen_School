@@ -10,6 +10,9 @@ import { pingDatabase } from './db.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { requestContext } from './middleware/request.js';
 import type { Logger } from './logger.js';
+import { requireSession } from './middleware/auth.js';
+import { adminApplicationsRouter } from './routes/admin/applications.js';
+import { authRouter } from './routes/auth.js';
 import { healthRouter, type HealthProbe } from './routes/health.js';
 import { publicApplicationsRouter } from './routes/public/applications.js';
 import { publicPlacementOptionsRouter } from './routes/public/placement-options.js';
@@ -19,6 +22,14 @@ export interface AppOptions {
   /** Number of proxies to trust for client IP. Verified in TEST_PLAN T3. */
   trustProxyHops: number;
   isProduction: boolean;
+  /**
+   * Origin allowed to make state-changing requests. Must be the deployed site
+   * origin in production — `index.ts` always passes the validated config value.
+   * The default exists only so tests need not restate it.
+   */
+  appOrigin?: string;
+  /** Session cookie name. `__Host-` prefixed in production (ADR-016). */
+  sessionCookieName?: string;
   /**
    * Overrides the database probe. Defaults to the real one.
    * Injectable so the endpoint's 200/503 contract can be tested without
@@ -40,7 +51,14 @@ const securityHeaders: RequestHandler = (req, res, next) => {
 };
 
 export function createApp(options: AppOptions): Express {
-  const { logger, trustProxyHops, isProduction, healthProbe = pingDatabase } = options;
+  const {
+    logger,
+    trustProxyHops,
+    isProduction,
+    appOrigin = 'http://localhost:5173',
+    sessionCookieName = '__Host-cs_session',
+    healthProbe = pingDatabase,
+  } = options;
   const app = express();
 
   // Do not advertise the framework.
@@ -67,6 +85,15 @@ export function createApp(options: AppOptions): Express {
   app.use(express.json({ limit: '100kb' }));
 
   app.use('/api/v1', healthRouter(healthProbe));
+  app.use('/api/v1/auth', authRouter({ appOrigin, sessionCookieName, isProduction }));
+
+  // Every admin route sits behind the session guard at the mount point, so a
+  // route added later cannot forget to authenticate.
+  app.use(
+    '/api/v1/admin',
+    requireSession({ sessionCookieName }),
+    adminApplicationsRouter(),
+  );
   app.use('/api/v1/public', publicPlacementOptionsRouter());
   app.use('/api/v1/public', publicApplicationsRouter());
 

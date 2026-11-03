@@ -294,6 +294,7 @@ the session on means editing the constant or the settings document. Recorded in
 `ARCHITECTURE.md` §15.
 
 ### S05 — Administrator authentication
+**Status:** Complete — 3 November 2026
 **Outcome** — Only an authenticated administrator reaches admin routes; sessions expire and revoke.
 **Covers** — FR-014 to FR-016, FR-036.
 **Depends on** — S02.
@@ -307,7 +308,33 @@ the session on means editing the constant or the settings document. Recorded in
 **Risks / rollback** — **The cookie design is unverified until S07.** Isolated in one module so a failure is a localised change.
 **DoD** — Login, navigate to a protected route, log out, and confirm the cookie no longer works.
 
+**Completion note (3 Nov 2026).** `POST /auth/login`, `POST /auth/logout`, `GET /auth/session`
+implemented with Argon2id (`@node-rs/argon2`, prebuilt — no node-gyp, so SECURITY A-06 does not
+apply), session rows holding only a SHA-256 of the token, a `__Host-` cookie, origin + CSRF
+checks, and Atlas-backed rate limiting.
+
+**All five acceptance criteria were observed against a running server**, not only in tests:
+`401` without a cookie, `401 SESSION_EXPIRED` past either limit, `403` without a CSRF token,
+`429` with `Retry-After: 900` on the sixth failure, and logout invalidating the cookie
+immediately. The DoD was performed literally with `curl`: login → `/auth/session` `200` →
+logout `204` → the same cookie `401`.
+
+**Two decisions taken during the slice.**
+- *Rate-limit storage.* `ARCHITECTURE` §7.5 required Atlas but no collection existed. Added
+  `ratelimits` with ADR-033, updating `DATA_MODEL.md` first as AGENTS.md §8 requires.
+- *CSRF token.* Storing it — even hashed — would make `GET /auth/session` unable to return it,
+  which API_SPEC §3.3 requires. It is derived: `HMAC-SHA256(sessionToken, "csrf-v1")`. Nothing is
+  stored, and another origin cannot derive it because it cannot read the `HttpOnly` cookie.
+
+**Login is origin-checked but not token-checked.** There is no session at login time, so there is
+no token to compare; the origin check is what prevents login CSRF.
+
+**Owner action outstanding:** the administrator account does not exist yet. Run
+`ADMIN_EMAIL=... npm run provision-admin --workspace server` and type the password yourself.
+Nothing in this slice creates an account, and there is no HTTP registration path by design.
+
 ### S06 — Admin application list and detail — core loop closed
+**Status:** Complete — 3 November 2026
 **Outcome** — **An administrator signs in and sees the application a parent just submitted.** The product's central promise works end to end.
 **Covers** — FR-017 to FR-019, FR-036, FR-037.
 **Depends on** — S04, S05.
@@ -320,6 +347,28 @@ the session on means editing the constant or the settings document. Recorded in
 **Verify** — API-A06 to A10; S-01 to S-04; E2E-04.
 **Risks / rollback** — A whole-document return leaking a field. Enforced by an explicit projection and asserted in a test.
 **DoD** — Recorded walkthrough: submit in one browser, sign in, find the record.
+
+**Completion note (3 Nov 2026).** `GET /admin/applications` and `GET /admin/applications/:id`
+behind the session guard at the mount point, plus the admin sign-in, list and detail screens.
+All ten verification IDs pass: API-A06 to A10 (projection, both search forms, sort and page-size
+rejection) and S-01 to S-04 (combined filters, empty result, both sort directions, pagination
+without duplicates).
+
+**The DoD was performed end to end in a browser**, driven over the DevTools protocol: a parent
+submitted an application, the administrator signed in and was redirected to the list, the record
+appeared at the top, search by surname returned exactly one application, search by phone found the
+same record, and the detail view rendered all sections including the sensitive block.
+
+**A documentation inconsistency, resolved by the roadmap itself.** This slice's `Verify` line
+lists **E2E-04**, which reads "admin signs in, views application, **edits, saves**". Editing is
+**S10 — Edit with revision history**, whose `Touches` explicitly names the `PATCH` handler and
+revision logic. S06's own `AI work` mentions only list, filters, projections and detail states.
+The read-only half of E2E-04 is covered here; the edit half moves to S10, and E2E-04 should be
+re-read as an S10 test.
+
+**Deliberately not built:** edit, trash, restore, permanent delete, photo streaming and PDF. Each
+has its own slice (S08–S11). There is no disabled edit button, because a control with no endpoint
+behind it implies a broken feature rather than an absent one.
 
 ### S07 — Deployed-domain spike — ⚠ needs accounts
 **Outcome** — Proof, or disproof, that the session cookie works across the real Vercel and Render domains.

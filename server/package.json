@@ -10,9 +10,11 @@
     "typecheck": "tsc -p tsconfig.test.json",
     "seed": "tsx --env-file=.env src/scripts/seed.ts",
     "sync-indexes": "tsx --env-file=.env src/scripts/sync-indexes.ts",
+    "provision-admin": "tsx --env-file=.env src/scripts/provision-admin.ts",
     "test": "vitest run"
   },
   "dependencies": {
+    "@node-rs/argon2": "^2.2.2",
     "@types/express": "^5.0.6",
     "@types/node": "^22.0.0",
     "express": "^5.3.0",

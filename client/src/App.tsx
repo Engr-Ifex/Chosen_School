@@ -1,7 +1,11 @@
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom';
 import { SiteLayout } from './components/site/SiteLayout';
 import { Container } from './components/ui/Container';
+import { SessionGate } from './components/admin/SessionGate';
 import Admissions from './pages/Admissions';
+import AdminApplicationDetail from './pages/admin/AdminApplicationDetail';
+import AdminApplications from './pages/admin/AdminApplications';
+import AdminLogin from './pages/admin/AdminLogin';
 import DesignSystem from './pages/DesignSystem';
 import Home from './pages/Home';
 
@@ -43,6 +47,16 @@ export default function App() {
         <Route element={<SiteLayout />}>
           <Route path="/" element={<Home />} />
           <Route path="/admissions" element={<Admissions />} />
+        </Route>
+
+        {/* Admin: sign-in is public, everything else sits behind the gate. */}
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route element={<SessionGate />}>
+          <Route path="/admin/applications" element={<AdminApplications />} />
+          <Route path="/admin/applications/:id" element={<AdminApplicationDetail />} />
+        </Route>
+
+        <Route element={<SiteLayout />}>
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

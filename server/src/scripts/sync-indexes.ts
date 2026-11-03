@@ -15,7 +15,9 @@
 import { connectDatabase, disconnectDatabase } from '../db.js';
 import { loadConfig } from '../config.js';
 import { Admin } from '../models/admin.js';
+import { AuditLog } from '../models/auditlog.js';
 import { Application } from '../models/application.js';
+import { RateLimit } from '../models/ratelimit.js';
 import { Session } from '../models/session.js';
 import { Settings } from '../models/settings.js';
 import { createLogger } from '../logger.js';
@@ -26,6 +28,8 @@ const models = [
   ['admins', Admin],
   ['applications', Application],
   ['sessions', Session],
+  ['auditlogs', AuditLog],
+  ['ratelimits', RateLimit],
   ['settings', Settings],
 ] as const;
 

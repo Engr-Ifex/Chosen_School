@@ -48,6 +48,7 @@ of places where integrity can be lost:
 | 12 | `settings` | Singleton for school information, contact details, placement options |
 | 13 | `pagecontents` | FR-002, FR-003 — fixed school-information sections (ADR-030) |
 | 14 | `auditlogs` | Security events and permanent deletions |
+| 15 | `ratelimits` | Rate-limit counters (ADR-033) |
 
 **Deliberately not created:** a `students` collection (a student has no identity outside an
 application), a `users` collection (one administrator), a `media` collection (photo metadata is
@@ -106,6 +107,12 @@ second guard.
 | `revokedAt` | Date \| null | no | Set on logout or forced revocation |
 | `ip` | String | no | Truncated; personal data, never logged in full |
 | `userAgent` | String | no | Truncated to 255 chars |
+
+**CSRF token — derived, not stored (S05).** The per-session CSRF token is
+`HMAC-SHA256(sessionToken, "csrf-v1")`, computed from the cookie value. Storing it — even hashed —
+would make `GET /auth/session` unable to return it, and storing it raw would put a second
+credential in the database. Derivation gives a token that is stable for the life of the session and
+unknowable to another origin, which cannot read the `HttpOnly` cookie.
 
 **Indexes:**
 - unique on `tokenHash`
@@ -566,6 +573,28 @@ A key set the school could edit would be exactly that.
 **Content responsibility:** an empty `body` means the school has not supplied that section. The
 public page must show an honest "information not yet available" state. No text is ever generated
 on the school's behalf.
+
+---
+
+## 13a. `ratelimits` — **[ADR-033]**
+
+**Purpose:** rate-limit counters that survive a process restart (ARCHITECTURE §7.5).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `key` | String | yes | Namespaced, e.g. `login:ip:203.0.113.7`, `login:email:a@b.test`. Unique |
+| `count` | Number | yes | Attempts inside the current window |
+| `windowStart` | Date | yes | Start of the fixed window. Compared on every read — never rely on TTL |
+| `expiresAt` | Date | yes | `windowStart + window`, for TTL housekeeping only |
+
+**Indexes:** unique on `key`; TTL on `expiresAt` (`expireAfterSeconds: 0`).
+
+**Never stored:** the password, the submitted email in clear beyond the counter key, or any
+request body. A counter key containing an email is the minimum needed to rate-limit per account.
+
+**Why a fixed window:** it is one atomic `$inc` plus one read, and the failure mode (a burst
+across a window boundary) is acceptable for login. A sliding window would need a document per
+attempt.
 
 ---
 

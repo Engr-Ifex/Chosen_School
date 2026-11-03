@@ -66,6 +66,8 @@ async function main(): Promise<void> {
     logger,
     trustProxyHops: config.trustProxyHops,
     isProduction: config.nodeEnv === 'production',
+    appOrigin: config.appOrigin,
+    sessionCookieName: config.sessionCookieName,
   });
 
   const server: Server = app.listen(config.port, () => {
