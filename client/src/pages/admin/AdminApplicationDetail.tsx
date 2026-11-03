@@ -1,9 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AdminLayout } from '../../components/admin/AdminLayout';
+import { ApplicationEditForm } from '../../components/admin/ApplicationEditForm';
+import { useAdminSession } from '../../components/admin/SessionGate';
 import { Button } from '../../components/ui/Button';
 import { StatusBadge } from '../../components/ui/StatusBadge';
-import { fetchApplication, type ApplicationDetail } from '../../lib/admin-api';
+import {
+  downloadPdf,
+  fetchApplication,
+  restoreApplication,
+  singlePdfPath,
+  trashApplication,
+  type ApplicationDetail,
+} from '../../lib/admin-api';
 
 /**
  * Application detail — DESIGN.md §6.4, read-only in this slice.
@@ -39,6 +48,11 @@ function Row({ label, value }: { label: string; value: string | null | undefined
 
 export default function AdminApplicationDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const session = useAdminSession();
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [record, setRecord] = useState<ApplicationDetail | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'missing'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
@@ -66,6 +80,51 @@ export default function AdminApplicationDetail() {
       cancelled = true;
     };
   }, [id]);
+
+  async function handleTrash() {
+    if (!id || !session) return;
+    setBusy(true);
+    setActionError(null);
+
+    const result = await trashApplication(id, session.csrfToken);
+    setBusy(false);
+
+    if (!result.ok) {
+      setActionError(result.message);
+      return;
+    }
+
+    // The record has left the live list, so return to it rather than showing a
+    // page the administrator can no longer act on.
+    navigate('/admin/applications', { replace: true });
+  }
+
+  async function handleExport() {
+    if (!id) return;
+    setBusy(true);
+    setActionError(null);
+
+    const result = await downloadPdf(singlePdfPath(id));
+    setBusy(false);
+
+    if (!result.ok) setActionError(result.message);
+  }
+
+  async function handleRestore() {
+    if (!id || !session) return;
+    setBusy(true);
+    setActionError(null);
+
+    const result = await restoreApplication(id, session.csrfToken);
+    setBusy(false);
+
+    if (!result.ok) {
+      setActionError(result.message);
+      return;
+    }
+
+    navigate(`/admin/applications/${id}`, { replace: true });
+  }
 
   const back = (
     <p className="mt-4">
@@ -120,12 +179,76 @@ export default function AdminApplicationDetail() {
                   {record.placement.classApplyingFor}
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <StatusBadge tone="info">{record.placement.academicSession}</StatusBadge>
-                {record.deletedAt && <StatusBadge tone="danger">In trash</StatusBadge>}
+              <div className="flex flex-col items-end gap-2">
+                <div className="flex flex-wrap justify-end gap-2">
+                  <StatusBadge tone="info">{record.placement.academicSession}</StatusBadge>
+                  {record.deletedAt && <StatusBadge tone="danger">In trash</StatusBadge>}
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-2">
+                  {record.deletedAt ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void handleRestore()}
+                    >
+                      {busy ? 'Restoring…' : 'Restore'}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void handleTrash()}
+                    >
+                      {busy ? 'Moving…' : 'Move to trash'}
+                    </Button>
+                  )}
+                  {!editing && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void handleExport()}
+                    >
+                      Export PDF
+                    </Button>
+                  )}
+                  {!record.deletedAt && !editing && (
+                    <Button variant="primary" size="sm" onClick={() => setEditing(true)}>
+                      Edit
+                    </Button>
+                  )}
+                  <Link
+                    to="/admin/trash"
+                    className="self-center text-sm font-medium text-brand underline hover:text-brand-hover"
+                  >
+                    Trash
+                  </Link>
+                </div>
+
+                {actionError && (
+                  <p role="alert" className="text-sm font-medium text-danger">
+                    {actionError}
+                  </p>
+                )}
               </div>
             </div>
 
+            {editing ? (
+              <div className="mt-6">
+                <ApplicationEditForm
+                  record={record}
+                  csrfToken={session?.csrfToken ?? ''}
+                  onSaved={(updated) => {
+                    setRecord(updated);
+                    setEditing(false);
+                  }}
+                  onCancel={() => setEditing(false)}
+                />
+              </div>
+            ) : (
             <div className="mt-6 space-y-6">
               <section className="rounded-[var(--radius-card)] border border-line bg-surface p-5">
                 <h2 className="text-lg font-semibold text-brand-dark">Student information</h2>
@@ -199,13 +322,25 @@ export default function AdminApplicationDetail() {
                   <ul className="mt-2 space-y-1 text-sm text-ink">
                     {record.revisions.map((revision, index) => (
                       <li key={`${revision.at}-${index}`}>
-                        {formatDate(revision.at)} — {revision.changedFields.join(', ')}
+                        <span className="font-medium">{formatDate(revision.at)}</span>
+                        <ul className="mt-1 space-y-0.5 text-muted">
+                          {revision.changedFields.map((field) => (
+                            <li key={field}>
+                              <span className="text-ink">{field}</span>
+                              {': '}
+                              {revision.before?.[field] || '—'}
+                              {' → '}
+                              {revision.after?.[field] || '—'}
+                            </li>
+                          ))}
+                        </ul>
                       </li>
                     ))}
                   </ul>
                 </section>
               )}
             </div>
+            )}
 
             {back}
           </>

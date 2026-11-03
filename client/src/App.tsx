@@ -6,6 +6,7 @@ import Admissions from './pages/Admissions';
 import AdminApplicationDetail from './pages/admin/AdminApplicationDetail';
 import AdminApplications from './pages/admin/AdminApplications';
 import AdminLogin from './pages/admin/AdminLogin';
+import AdminTrash from './pages/admin/AdminTrash';
 import DesignSystem from './pages/DesignSystem';
 import Home from './pages/Home';
 
@@ -54,6 +55,7 @@ export default function App() {
         <Route element={<SessionGate />}>
           <Route path="/admin/applications" element={<AdminApplications />} />
           <Route path="/admin/applications/:id" element={<AdminApplicationDetail />} />
+          <Route path="/admin/trash" element={<AdminTrash />} />
         </Route>
 
         <Route element={<SiteLayout />}>

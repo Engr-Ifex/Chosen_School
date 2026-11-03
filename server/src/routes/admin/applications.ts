@@ -13,8 +13,16 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { AppError } from '../../errors.js';
+import { pdfFilename, renderApplicationsPdf } from '../../lib/pdf/application-pdf.js';
 import { getStorage } from '../../lib/storage/index.js';
 import { Application } from '../../models/application.js';
+import {
+  applicationEditSchema,
+  findImmutableField,
+  toEditFieldErrors,
+} from '../../schemas/application-edit.js';
+import { editApplication, toDetail } from '../../services/application-edit.js';
+import { moveToTrash, permanentlyDelete, restoreFromTrash } from '../../services/trash.js';
 
 /** Sortable fields. Anything else is a `VALIDATION_ERROR`, never a fallback. */
 const SORTABLE = [
@@ -93,6 +101,22 @@ function toListItem(doc: ListItemSource) {
   };
 }
 
+
+/** API_SPEC §4.2: a bulk export is capped at 50 records. */
+const MAX_BULK_PDF = 50;
+
+/**
+ * Personal data leaves the server here, so `no-store` is not optional: a proxy
+ * or browser cache holding a copy would outlive the session that requested it.
+ */
+function sendPdf(res: import('express').Response, buffer: Buffer, filename: string): void {
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.send(buffer);
+}
+
 export function adminApplicationsRouter(): Router {
   const router = Router();
 
@@ -165,6 +189,36 @@ export function adminApplicationsRouter(): Router {
   });
 
   /**
+   * Edit an application — API_SPEC §4.2.
+   *
+   * Immutable fields are **rejected**, not ignored: a client that believes it
+   * changed something it did not is worse off than one that gets an error.
+   */
+  router.patch('/applications/:id', async (req, res) => {
+    const immutable = findImmutableField(req.body);
+
+    if (immutable !== null) {
+      throw new AppError('VALIDATION_ERROR', 'Some details cannot be changed.', {
+        [immutable]: 'cannot be changed after submission',
+      });
+    }
+
+    const parsed = applicationEditSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        'Some details need correcting.',
+        toEditFieldErrors(parsed.error),
+      );
+    }
+
+    const { record } = await editApplication(req.params.id, parsed.data, req.auth!.adminId);
+
+    res.status(200).json(record);
+  });
+
+  /**
    * Streams the private photograph — API_SPEC §4.2.
    *
    * Never a redirect and never a presigned URL: both would hand out a link that
@@ -202,6 +256,97 @@ export function adminApplicationsRouter(): Router {
     res.send(object.data);
   });
 
+  /**
+   * Bulk export — API_SPEC §4.2, ADR-026.
+   *
+   * Registered **before** `/applications/:id`, or that route would capture the
+   * literal `pdf` and reject it as a malformed identifier.
+   *
+   * Over 50 ids is a `VALIDATION_ERROR`, not a truncated PDF; an unknown id is a
+   * `404`, not a quietly smaller file. Both produce something that looks
+   * complete and is not, which is worse than an error.
+   */
+  router.get('/applications/pdf', async (req, res) => {
+    const raw = typeof req.query.ids === 'string' ? req.query.ids : '';
+    const ids = raw
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value) => value !== '');
+
+    if (ids.length === 0) {
+      throw new AppError('VALIDATION_ERROR', 'Select at least one application to export.', {
+        ids: 'is required',
+      });
+    }
+
+    if (ids.length > MAX_BULK_PDF) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        `Select ${MAX_BULK_PDF} applications or fewer.`,
+        { ids: `at most ${MAX_BULK_PDF} identifiers` },
+      );
+    }
+
+    if (ids.some((id) => !/^[0-9a-fA-F]{24}$/.test(id))) {
+      throw new AppError('VALIDATION_ERROR', 'That application id is not valid.', {
+        ids: 'contains a malformed identifier',
+      });
+    }
+
+    const docs = await Application.find({ _id: { $in: ids } }).lean();
+    const byId = new Map(docs.map((doc) => [String(doc._id), doc]));
+
+    // Every requested id must exist. Skipping a missing one would yield a file
+    // that looks complete and is not.
+    const missing = ids.filter((id) => !byId.has(id));
+    if (missing.length > 0) {
+      throw new AppError('NOT_FOUND', 'One or more applications could not be found.');
+    }
+
+    const records = ids.map((id) => byId.get(id)!);
+
+    const buffer = await renderApplicationsPdf(
+      records.map((doc) => ({ record: toDetail(doc) })),
+      // Health information is never included in a bulk export (ADR-026).
+      { includeHealth: false },
+    );
+
+    sendPdf(res, buffer, pdfFilename(records.map((doc) => toDetail(doc))));
+  });
+
+  /**
+   * Single-record export. This is the only PDF that carries health information,
+   * because it is exported deliberately, one record at a time.
+   */
+  router.get('/applications/:id/pdf', async (req, res) => {
+    const { id } = req.params;
+
+    if (!/^[0-9a-fA-F]{24}$/.test(id)) {
+      throw new AppError('VALIDATION_ERROR', 'That application id is not valid.', {
+        id: 'must be a 24-character identifier',
+      });
+    }
+
+    const doc = await Application.findById(id).lean();
+
+    if (!doc) throw new AppError('NOT_FOUND', 'That application could not be found.');
+
+    let photo: Buffer | null = null;
+    if (doc.photo?.key) {
+      try {
+        photo = (await getStorage().get(doc.photo.key))?.data ?? null;
+      } catch {
+        // A missing image must not stop the record being exported.
+        photo = null;
+      }
+    }
+
+    const record = toDetail(doc);
+    const buffer = await renderApplicationsPdf([{ record, photo }], { includeHealth: true });
+
+    sendPdf(res, buffer, pdfFilename([record]));
+  });
+
   router.get('/applications/:id', async (req, res) => {
     const { id } = req.params;
 
@@ -217,21 +362,105 @@ export function adminApplicationsRouter(): Router {
     if (!doc) throw new AppError('NOT_FOUND', 'That application could not be found.');
 
     // The detail view is the protected admin view, so health information and
-    // revision history are included — but still shaped explicitly.
+    // revision history are included — but still shaped explicitly, and through
+    // the same helper PATCH uses so the two cannot drift apart.
+    res.status(200).json(toDetail(doc));
+  });
+
+  /**
+   * Trash — API_SPEC §4.3.
+   *
+   * Deliberately narrow: enough to identify a record, and nothing that would
+   * make the trash a second copy of the data someone just tried to remove. No
+   * health information, no address, no photograph, no guardian phone.
+   */
+  router.get('/trash', async (req, res) => {
+    const parsed = z
+      .object({
+        type: z.enum(['application']).default('application'),
+        page: z.coerce.number().int().min(1).default(1),
+        pageSize: z.coerce.number().int().min(1).max(100).default(20),
+      })
+      .safeParse(req.query);
+
+    if (!parsed.success) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        'Some filters need correcting.',
+        toFieldErrors(parsed.error),
+      );
+    }
+
+    const { page, pageSize } = parsed.data;
+    const filter = { deletedAt: { $ne: null } };
+
+    const [total, docs] = await Promise.all([
+      Application.countDocuments(filter),
+      Application.find(filter)
+        .select(
+          'student.surname student.firstName student.middleName ' +
+            'placement.section placement.classApplyingFor submittedAt deletedAt',
+        )
+        .sort({ deletedAt: -1, _id: 1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .lean(),
+    ]);
+
     res.status(200).json({
-      id: String(doc._id),
-      student: doc.student,
-      guardian: doc.guardian,
-      placement: doc.placement,
-      signature: doc.signature,
-      healthInformation: doc.healthInformation ?? null,
-      photo: doc.photo
-        ? { contentType: doc.photo.contentType, width: doc.photo.width, height: doc.photo.height }
-        : null,
-      revisions: doc.revisions ?? [],
-      submittedAt: doc.submittedAt,
-      deletedAt: doc.deletedAt ?? null,
+      data: docs.map((doc) => ({
+        id: String(doc._id),
+        student: {
+          surname: doc.student?.surname ?? '',
+          firstName: doc.student?.firstName ?? '',
+          middleName: doc.student?.middleName ?? null,
+        },
+        placement: {
+          section: doc.placement?.section ?? '',
+          classApplyingFor: doc.placement?.classApplyingFor ?? '',
+        },
+        submittedAt: doc.submittedAt ?? null,
+        deletedAt: doc.deletedAt ?? null,
+      })),
+      meta: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      },
     });
+  });
+
+  /** Move to Trash. Recoverable; `submittedAt` is untouched. */
+  router.delete('/applications/:id', async (req, res) => {
+    const record = await moveToTrash(req.params.id, req.auth!.adminId);
+    res.status(200).json(record);
+  });
+
+  /** Restore from Trash. */
+  router.post('/applications/:id/restore', async (req, res) => {
+    const record = await restoreFromTrash(req.params.id);
+    res.status(200).json(record);
+  });
+
+  /**
+   * Permanent delete. Irreversible.
+   *
+   * The `confirm` body field must equal the id, so a stray request — or a
+   * replayed one against the wrong record — cannot destroy anything.
+   */
+  router.delete('/applications/:id/permanent', async (req, res) => {
+    const parsed = z.object({ confirm: z.string().min(1).max(64) }).safeParse(req.body);
+
+    if (!parsed.success) {
+      throw new AppError('VALIDATION_ERROR', 'The confirmation did not match this record.', {
+        confirm: 'is required',
+      });
+    }
+
+    await permanentlyDelete(req.params.id, parsed.data.confirm, req.auth!.adminId);
+
+    res.status(204).end();
   });
 
   return router;

@@ -449,6 +449,7 @@ without naming the fields. The multipart body is now `payload` (the JSON, as a s
 (the file). The JSON path is unchanged, so a submission without a photo is byte-for-byte as before.
 
 ### S09 — Trash, restore, permanent delete
+**Status:** Complete — 3 November 2026
 **Outcome** — Records can be removed recoverably, and deleted irreversibly only with explicit confirmation.
 **Covers** — FR-021, FR-022.
 **Depends on** — S08.
@@ -462,7 +463,28 @@ without naming the fields. The multipart body is now `payload` (the JSON, as a s
 **Risks / rollback** — Orphaned photo if the order is reversed. The order is the control; test it.
 **DoD** — Delete a record with a photo and confirm neither the document nor the object remains.
 
+**Completion note (3 Nov 2026).** Soft delete, restore, permanent delete and a Trash view. The
+ordering rule from DATA_MODEL §4.6 is enforced in one place (`services/trash.ts`): object, then
+document, then audit.
+
+**The DoD was performed with real files.** A record with a photo was uploaded, trashed, then
+permanently deleted. Afterwards: **0 documents** in the collection, **0 files** on disk, and one
+`application.permanently_deleted` audit entry whose `targetId` matched and whose `meta.hadPhoto`
+was true. The audit entry carries no name, no health information and no address.
+
+**API-A18 was proven by making storage fail**, not by reading the code: with `remove` rejecting,
+the endpoint returns `500` and the document is still present. That is the whole reason the order
+matters — a failure at that step loses nothing and can be retried.
+
+**Two additions beyond the letter of the spec, both narrowing:**
+- A record must be in the Trash before it can be permanently deleted. Deleting a live record would
+  skip the recoverable step entirely; the attempt returns `409`.
+- CSRF and origin checks are now applied to **every** admin mutation at the router mount, not
+  per-route. Until this slice the admin router had none, because it had no mutations. A route added
+  later cannot now be born unprotected.
+
 ### S10 — Edit with revision history
+**Status:** Complete — 3 November 2026
 **Outcome** — An administrator can correct an application, and the change is attributable and traceable.
 **Covers** — FR-019, FR-020.
 **Depends on** — S06.
@@ -475,6 +497,27 @@ without naming the fields. The multipart body is now `payload` (the JSON, as a s
 **Verify** — API-A11 to A13; DB-10.
 **Risks / rollback** — Unbounded array growth. Cap at 50 and test the cap.
 **DoD** — Edit two fields, confirm the revision lists exactly those two.
+
+**Completion note (3 Nov 2026).** `PATCH /admin/applications/:id` with partial updates, immutable
+fields rejected rather than ignored, and a revision carrying only the leaves that moved.
+
+**The DoD was performed live:** changing `student.surname` and `guardian.phone` produced one
+revision whose `changedFields` was exactly those two, with `before` and `after` holding only them.
+
+**Comparison runs after Mongoose applies its setters.** That is what makes a phone number typed
+`0803 123 4567` against a stored `08031234567` correctly count as *no change* — comparing raw input
+to stored output would have invented a revision on every save and made the history worthless.
+
+**Two checks the spec did not spell out but the model requires:**
+- *The section/class pair.* A PATCH may change one or the other, so the service validates the
+  **effective** pair after merging and reports against `placement.classApplyingFor`. Changing the
+  section alone to one that does not offer the stored class is `422`.
+- *Trashed records are not editable* (`409`). Editing something queued for deletion is a way to
+  lose the work when it is purged.
+
+**Cap:** the 51st edit drops the oldest revision rather than failing. Tested by seeding 50 and
+editing once — the array stays at 50, the newest entry is the edit, and the document stays well
+under DB-10's 1 MB bound.
 
 ### S11 — PDF export
 **Outcome** — An application prints or exports as a clean PDF, singly or in bulk.

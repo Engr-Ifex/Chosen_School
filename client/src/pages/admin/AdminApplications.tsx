@@ -4,6 +4,8 @@ import { AdminLayout } from '../../components/admin/AdminLayout';
 import { Button } from '../../components/ui/Button';
 import { Select } from '../../components/ui/Select';
 import {
+  bulkPdfPath,
+  downloadPdf,
   fetchApplications,
   type ApplicationListItem,
   type ListMeta,
@@ -50,6 +52,9 @@ export default function AdminApplications() {
   const [errorMessage, setErrorMessage] = useState('');
   const [options, setOptions] = useState<PlacementOptions | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     void fetchPlacementOptions().then(setOptions);
@@ -84,6 +89,44 @@ export default function AdminApplications() {
     };
   }, [params, reloadToken]);
 
+  function toggleSelected(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllOnPage() {
+    setSelected((current) => {
+      const allSelected = items.every((item) => current.has(item.id));
+      const next = new Set(current);
+      for (const item of items) {
+        if (allSelected) next.delete(item.id);
+        else next.add(item.id);
+      }
+      return next;
+    });
+  }
+
+  async function handleBulkExport() {
+    if (selected.size === 0 || exporting) return;
+
+    setExporting(true);
+    setExportError(null);
+
+    const result = await downloadPdf(bulkPdfPath([...selected]));
+    setExporting(false);
+
+    if (!result.ok) {
+      setExportError(result.message);
+      return;
+    }
+
+    setSelected(new Set());
+  }
+
   const hasFilters = Boolean(params.q || params.section || params.class || params.session);
   const classes = useMemo(() => {
     if (!options) return [];
@@ -112,6 +155,28 @@ export default function AdminApplications() {
         <p className="mt-1 text-sm text-muted">
           {meta ? `${meta.total} application${meta.total === 1 ? '' : 's'}` : 'Loading…'}
         </p>
+
+        {selected.size > 0 && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-control)] border border-line bg-brand-soft/60 p-3">
+            <p className="text-sm font-medium text-brand-dark">
+              {selected.size} application{selected.size === 1 ? '' : 's'} selected
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" disabled={exporting} onClick={() => void handleBulkExport()}>
+                {exporting ? 'Preparing…' : `Export selected (${selected.size})`}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setSelected(new Set())}>
+                Clear
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {exportError && (
+          <div role="alert" className="mt-4 rounded-[var(--radius-control)] border border-danger/30 bg-danger-soft p-3">
+            <p className="text-sm font-medium text-danger">{exportError}</p>
+          </div>
+        )}
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="flex flex-col gap-1.5">
@@ -221,6 +286,15 @@ export default function AdminApplications() {
                 <caption className="sr-only">Admission applications</caption>
                 <thead className="border-b border-line bg-brand-soft/60">
                   <tr>
+                    <th scope="col" className="w-10 px-4 py-3">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all applications on this page"
+                        checked={items.length > 0 && items.every((item) => selected.has(item.id))}
+                        onChange={toggleAllOnPage}
+                        className="h-4 w-4 accent-[var(--color-brand)]"
+                      />
+                    </th>
                     <th scope="col" className="px-4 py-3 font-semibold text-brand-dark">
                       <button type="button" onClick={() => toggleSort('student.surname')} className="underline-offset-2 hover:underline">
                         Applicant{sortIndicator('student.surname')}
@@ -242,6 +316,15 @@ export default function AdminApplications() {
                 <tbody>
                   {items.map((item) => (
                     <tr key={item.id} className="border-b border-line last:border-0">
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${fullName(item)}`}
+                          checked={selected.has(item.id)}
+                          onChange={() => toggleSelected(item.id)}
+                          className="h-4 w-4 accent-[var(--color-brand)]"
+                        />
+                      </td>
                       <td className="px-4 py-3 text-ink">{fullName(item)}</td>
                       <td className="px-4 py-3 capitalize text-ink">{item.placement.section}</td>
                       <td className="px-4 py-3 text-ink">{item.placement.classApplyingFor}</td>
@@ -268,7 +351,16 @@ export default function AdminApplications() {
                   key={item.id}
                   className="rounded-[var(--radius-card)] border border-line bg-surface p-4"
                 >
-                  <p className="font-medium text-ink">{fullName(item)}</p>
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${fullName(item)}`}
+                      checked={selected.has(item.id)}
+                      onChange={() => toggleSelected(item.id)}
+                      className="mt-1 h-4 w-4 accent-[var(--color-brand)]"
+                    />
+                    <p className="font-medium text-ink">{fullName(item)}</p>
+                  </div>
                   <p className="mt-1 text-sm capitalize text-muted">
                     {item.placement.section} · {item.placement.classApplyingFor} ·{' '}
                     {item.placement.academicSession}

@@ -11,6 +11,7 @@ import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { requestContext } from './middleware/request.js';
 import type { Logger } from './logger.js';
 import { requireSession } from './middleware/auth.js';
+import { checkOriginAndCsrf } from './middleware/csrf.js';
 import { adminApplicationsRouter } from './routes/admin/applications.js';
 import { authRouter } from './routes/auth.js';
 import { healthRouter, type HealthProbe } from './routes/health.js';
@@ -92,6 +93,10 @@ export function createApp(options: AppOptions): Express {
   app.use(
     '/api/v1/admin',
     requireSession({ sessionCookieName }),
+    // Every admin mutation carries a CSRF token and an origin check. Applied at
+    // the mount point so a route added later cannot be born unprotected; the
+    // middleware ignores safe methods, so reads are unaffected.
+    checkOriginAndCsrf({ appOrigin, requireToken: true }),
     adminApplicationsRouter(),
   );
   app.use('/api/v1/public', publicPlacementOptionsRouter());

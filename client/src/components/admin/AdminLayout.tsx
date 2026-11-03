@@ -41,6 +41,12 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
               >
                 Applications
               </Link>
+              <Link
+                to="/admin/trash"
+                className="rounded-[var(--radius-control)] px-3 py-2 text-sm font-medium text-brand-dark hover:bg-brand-soft"
+              >
+                Trash
+              </Link>
               <span className="hidden text-sm text-muted sm:inline">{session?.admin.email}</span>
               <Button variant="secondary" size="sm" onClick={() => void handleSignOut()}>
                 Sign out

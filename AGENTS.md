@@ -6,7 +6,7 @@ Instructions for any AI agent working in this repository. Short by design — de
 
 ## 1. Repository state — read this first
 
-**Authentication and uploads exist; the product does not.** ROADMAP slices S00–S06 and S08 are complete:/n`GET /api/v1/health`, `POST /api/v1/public/applications`, configuration validation, the error
+**Authentication, uploads, deletion and editing exist; the product does not.** ROADMAP slices S00–S10 are complete:/n`GET /api/v1/health`, `POST /api/v1/public/applications`, configuration validation, the error
 envelope, request logging, four Mongoose models with a synthetic seed. There are no admin routes,
 no authentication and no real pages yet.
 
@@ -65,8 +65,8 @@ Verified on **28 October 2026**:
 |---|---|---|
 | Install | `npm install` | 157 packages, 0 vulnerabilities |
 | Development | `npm run dev` (client, `:5173`) · `npm run dev:server` (API) | Client served `HTTP 200` |
-| Tests | `npm test` | 220 tests in 25 files — 158 pass, 62 skipped (database integration, opt-in) |
-| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | 184 pass, requires a `mongod` binary |
+| Tests | `npm test` | 249 tests in 27 files — 158 pass, 91 skipped (database integration, opt-in) |
+| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | 213 pass, requires a `mongod` binary |
 | Admin account | `ADMIN_EMAIL=... npm run provision-admin --workspace server` | Creates or rotates the single admin; deletes all sessions on rotation |
 | Seed | `npm run seed --workspace server` | 20 synthetic applications; refuses in production |
 | Indexes | `npm run sync-indexes --workspace server` | Creates declared indexes; `autoIndex` is off by design |
