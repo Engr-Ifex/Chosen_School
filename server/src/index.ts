@@ -21,6 +21,7 @@ const CONFIG_KEYS = [
   'SESSION_COOKIE_NAME',
   'TRUST_PROXY_HOPS',
   'LOG_LEVEL',
+  'ALLOW_REMOTE_DEV_DB',
 ];
 
 function readConfigOrExit(): Config {

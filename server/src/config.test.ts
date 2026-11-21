@@ -96,6 +96,55 @@ describe('loadConfig', () => {
   });
 });
 
+describe('development database guard (ADR-035)', () => {
+  const dev = { ...valid, NODE_ENV: 'development' };
+
+  it('accepts a local database in development', () => {
+    expect(() => loadConfig({ ...dev, MONGODB_URI: 'mongodb://127.0.0.1:27017' })).not.toThrow();
+    expect(() => loadConfig({ ...dev, MONGODB_URI: 'mongodb://localhost:27017' })).not.toThrow();
+  });
+
+  it('refuses an Atlas URI in development — the override was lost', () => {
+    const error = captureIssues({
+      ...dev,
+      MONGODB_URI: 'mongodb+srv://user:secret@cluster0.example.net/db',
+    });
+
+    expect(error.issues.map((issue) => issue.variable)).toContain('MONGODB_URI');
+    // The message names the fix, and never echoes the credential.
+    expect(error.message).toContain('dev:db');
+    expect(error.message).not.toContain('secret');
+  });
+
+  it('refuses a remote mongodb:// host in development', () => {
+    const error = captureIssues({ ...dev, MONGODB_URI: 'mongodb://db.example.net:27017' });
+    expect(error.issues.map((issue) => issue.variable)).toContain('MONGODB_URI');
+  });
+
+  it('allows a remote database only with the explicit opt-in', () => {
+    expect(() =>
+      loadConfig({
+        ...dev,
+        MONGODB_URI: 'mongodb+srv://cluster0.example.net/db',
+        ALLOW_REMOTE_DEV_DB: 'true',
+      }),
+    ).not.toThrow();
+  });
+
+  it('does not apply in production or test', () => {
+    const atlas = 'mongodb+srv://cluster0.example.net/db';
+    expect(() => loadConfig({ ...valid, NODE_ENV: 'test', MONGODB_URI: atlas })).not.toThrow();
+    expect(() =>
+      loadConfig({
+        ...valid,
+        NODE_ENV: 'production',
+        MONGODB_URI: atlas,
+        APP_ORIGIN: 'https://school.example',
+      }),
+    ).not.toThrow();
+  });
+});
+
 describe('mongoHost', () => {
   it('extracts a plain host', () => {
     expect(mongoHost('mongodb://127.0.0.1:27017/db')).toBe('127.0.0.1');

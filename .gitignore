@@ -9,6 +9,9 @@
 # Uploaded photographs (local storage driver) — private, never committed
 server/.storage/
 
+# Local development database (npm run dev:db, ADR-035)
+server/.mongo-dev/
+
 # Backup artifacts must never be committed — they contain personal data
 backups/
 *.age

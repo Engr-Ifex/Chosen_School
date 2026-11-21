@@ -62,8 +62,8 @@ const absoluteUrl = z.string().refine(
  * Credentials are stripped and only the first host of a replica set is used, so
  * the result is safe to log. Returns `null` if no host can be found.
  *
- * Used for the startup log that names the database actually in use — it makes
- * no decision about which database is allowed.
+ * Used for the startup log that names the database actually in use, and by
+ * the development guard in `loadConfig` (ADR-035).
  */
 export function mongoHost(uri: string): string | null {
   const withoutScheme = uri.replace(/^mongodb(\+srv)?:\/\//, '');
@@ -89,7 +89,16 @@ const schema = z.object({
   SESSION_COOKIE_NAME: z.string().min(1).default('__Host-cs_session'),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+  /** Opt-in to a non-local database in development (ADR-035). */
+  ALLOW_REMOTE_DEV_DB: z.enum(['true', 'false']).default('false'),
 });
+
+/**
+ * Hosts that count as "this machine" for the development database guard.
+ * IPv6 literals are not recognised by `mongoHost`, so `[::1]` is refused — the
+ * guard fails closed rather than guessing.
+ */
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
 
 /**
  * Parses and validates configuration from an environment-like object.
@@ -117,6 +126,21 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       issues.push({
         variable: 'SESSION_COOKIE_NAME',
         message: 'must start with __Host- in production (see ADR-016)',
+      });
+    }
+  }
+
+  // Development never reaches Atlas by accident (ADR-035). `.env.development`
+  // points at the local database; this catches that override being deleted or
+  // mistyped, which would otherwise fall back to the production URI in `.env`.
+  if (value.NODE_ENV === 'development' && value.ALLOW_REMOTE_DEV_DB !== 'true') {
+    const host = mongoHost(value.MONGODB_URI);
+    if (!host || !LOCAL_HOSTS.has(host.toLowerCase())) {
+      issues.push({
+        variable: 'MONGODB_URI',
+        message:
+          'must point at a local database in development (run `npm run dev:db`); ' +
+          'set ALLOW_REMOTE_DEV_DB=true only for a non-production cluster (ADR-035)',
       });
     }
   }

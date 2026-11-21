@@ -4,8 +4,8 @@ Public website and private administrator dashboard for Chosen School (Primary an
 
 **Status (21 November 2026):** the core admissions loop runs locally. A parent can submit the
 admission form, and the administrator can sign in, review, edit, trash, restore and permanently
-delete applications. ROADMAP slices S00–S06 and S08–S10 are complete and S11 (PDF export) is in
-progress. Nothing is deployed. The current position is in `docs/ROADMAP.md` §3.
+delete applications, and export them as PDFs. ROADMAP slices S00–S06 and S08–S11 are complete.
+Nothing is deployed. The current position is in `docs/ROADMAP.md` §3.
 
 ## Structure
 

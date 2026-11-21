@@ -421,7 +421,8 @@ request naming an unknown id is a `404` — silently skipping would produce a PD
 complete and is not.
 
 PDF content: student, guardian, placement, submission date, photo if present, and a header
-identifying it as an application record. **Health information is included only in the single-
+identifying it as an application record. The photograph appears in **both** single and bulk
+exports (ADR-034, 22 November 2026), re-encoded at no more than 440 px. **Health information is included only in the single-
 record PDF, never in a bulk export** — a bulk file is more likely to be emailed or printed and
 left lying around. Approved 24 October 2026 as ADR-026.
 

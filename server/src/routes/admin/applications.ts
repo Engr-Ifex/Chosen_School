@@ -103,6 +103,19 @@ function toListItem(doc: ListItemSource) {
 }
 
 
+/**
+ * Reads a stored photograph for a PDF. A missing or unreadable image must not
+ * stop the record being exported, so every failure becomes `null`.
+ */
+async function loadPhoto(key: string | null | undefined): Promise<Buffer | null> {
+  if (!key) return null;
+  try {
+    return (await getStorage().get(key))?.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** API_SPEC §4.2: a bulk export is capped at 50 records. */
 const MAX_BULK_PDF = 50;
 
@@ -312,8 +325,15 @@ export function adminApplicationsRouter(): Router {
 
     const records = ids.map((id) => byId.get(id)!);
 
+    // Photographs are included in bulk (ADR-034). Fetched one at a time, not
+    // all at once, so 50 records never hold 50 storage reads open together.
+    const entries = [];
+    for (const doc of records) {
+      entries.push({ record: toDetail(doc), photo: await loadPhoto(doc.photo?.key) });
+    }
+
     const buffer = await renderApplicationsPdf(
-      records.map((doc) => ({ record: toDetail(doc) })),
+      entries,
       // Health information is never included in a bulk export (ADR-026).
       { includeHealth: false },
     );
@@ -340,15 +360,7 @@ export function adminApplicationsRouter(): Router {
 
     if (!doc) throw new AppError('NOT_FOUND', 'That application could not be found.');
 
-    let photo: Buffer | null = null;
-    if (doc.photo?.key) {
-      try {
-        photo = (await getStorage().get(doc.photo.key))?.data ?? null;
-      } catch {
-        // A missing image must not stop the record being exported.
-        photo = null;
-      }
-    }
+    const photo = await loadPhoto(doc.photo?.key);
 
     const record = toDetail(doc);
     const buffer = await renderApplicationsPdf([{ record, photo }], { includeHealth: true });

@@ -218,3 +218,90 @@ describe.skipIf(!run)('photo upload', () => {
     expect(response.status).toBe(422);
   });
 });
+
+/**
+ * Photographs in PDF exports (ADR-034). Lives here, not in pdf.test.ts,
+ * because this file already points storage at a temporary directory.
+ */
+describe.skipIf(!run)('photographs in PDF exports', () => {
+  let mongo: MongoMemoryServer;
+
+  beforeAll(async () => {
+    mongo = await MongoMemoryServer.create();
+    await connectDatabase(mongo.getUri(), 'chosen_school_test');
+    await Promise.all([Admin.syncIndexes(), Application.syncIndexes(), Session.syncIndexes()]);
+  }, 240_000);
+
+  afterAll(async () => {
+    await disconnectDatabase();
+    await mongo.stop();
+  });
+
+  beforeEach(async () => {
+    await Promise.all([
+      Admin.deleteMany({}),
+      Application.deleteMany({}),
+      Session.deleteMany({}),
+      RateLimit.deleteMany({}),
+    ]);
+    const hashed = await hashPassword(PASSWORD);
+    await Admin.create({
+      email: EMAIL,
+      passwordHash: hashed.hash,
+      passwordAlgo: hashed.algo,
+      passwordParams: hashed.params,
+      passwordUpdatedAt: new Date(),
+    });
+  });
+
+  /** Collects the raw bytes; supertest would otherwise try to parse them. */
+  // At runtime the parser receives the raw response stream; superagent's types
+  // describe it as its own Response, hence the narrowing.
+  const binary: Parameters<request.Test['parse']>[0] = (res, done) => {
+    const stream = res as unknown as NodeJS.ReadableStream;
+    const chunks: Buffer[] = [];
+    stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+    stream.on('end', () => done(null, Buffer.concat(chunks)));
+  };
+
+  const imageCount = (pdf: Buffer): number =>
+    (pdf.toString('latin1').match(/\/Subtype\s*\/Image/g) ?? []).length;
+
+  async function submit(withPhoto: boolean): Promise<string> {
+    const base = request(app()).post('/api/v1/public/applications');
+    const response = withPhoto
+      ? await base.field('payload', JSON.stringify(payload())).attach('photo', await jpeg(), 'photo.jpg')
+      : await base.send(payload());
+    expect(response.status).toBe(201);
+    return response.body.id as string;
+  }
+
+  it('embeds each record photograph in a bulk export', async () => {
+    const ids = [await submit(true), await submit(false), await submit(true)];
+    const agent = request.agent(app());
+    await agent.post('/api/v1/auth/login').send({ email: EMAIL, password: PASSWORD });
+
+    const response = await agent
+      .get(`/api/v1/admin/applications/pdf?ids=${ids.join(',')}`)
+      .buffer(true)
+      .parse(binary);
+
+    expect(response.status).toBe(200);
+    // Two of the three records have a photograph.
+    expect(imageCount(response.body as Buffer)).toBe(2);
+  });
+
+  it('embeds the photograph in a single export', async () => {
+    const id = await submit(true);
+    const agent = request.agent(app());
+    await agent.post('/api/v1/auth/login').send({ email: EMAIL, password: PASSWORD });
+
+    const response = await agent
+      .get(`/api/v1/admin/applications/${id}/pdf`)
+      .buffer(true)
+      .parse(binary);
+
+    expect(response.status).toBe(200);
+    expect(imageCount(response.body as Buffer)).toBe(1);
+  });
+});

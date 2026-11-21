@@ -96,38 +96,52 @@ separate backup project preserves the separation. This is **D-12**, still awaiti
 
 | Variable | Local development | Vercel preview | Production |
 |---|---|---|---|
-| `MONGODB_URI` | Local `mongod` or a separate dev M0 | — | Atlas |
+| `MONGODB_URI` | `mongodb://127.0.0.1:27017` from `npm run dev:db` (ADR-035) | — | Atlas |
+| `MONGODB_DB_NAME` | `chosen_school_dev` | — | `chosen_school` |
 | `APP_ORIGIN` | `http://localhost:5173` | Preview URL | Production URL |
 | `TRUST_PROXY_HOPS` | `0` | `2` (verify) | `2` (verify) |
 | `VITE_API_BASE_URL` | `/api/v1` (Vite dev proxy) | `/api/v1` | `/api/v1` |
-| `ALLOW_REMOTE_DEV_DB` | `false` | `false` | not used |
+| `ALLOW_REMOTE_DEV_DB` | unset (`false`). Set `true` only to develop against a second, non-production Atlas cluster | `false` | not used |
 | Supabase variables | Local storage stub, or a dev bucket in a spare project | — | Application project |
 
 ### 5.1 Which file, and when
 
 | Where | Files | Loaded by |
 |---|---|---|
-| Local development | `server/.env` then `server/.env.development` | `npm run dev:server` |
-| Local database operations | `server/.env` only | `seed`, `sync-indexes`, `provision-admin` |
+| Local development | `server/.env` then `server/.env.development` | `npm run dev:server`; `seed:dev`, `sync-indexes:dev`, `provision-admin:dev` |
+| Production database operations | `server/.env` only | `seed`, `sync-indexes`, `provision-admin` (unsuffixed) |
 | Production | **no file** | `npm start` = `node dist/index.js`; Render supplies the environment |
 | Deployment register | `.env.example` (root) | nothing — it documents the Render and Vercel variables |
 
-`server/.env.development` contains **only** `NODE_ENV=development` and
-`APP_ORIGIN=http://localhost:5173`. It holds no secrets, so it is committed. Node applies later
-`--env-file` flags over earlier ones, which is what makes this a two-line override rather than a
-second configuration file to keep in sync.
+`server/.env.development` overrides four values: `NODE_ENV=development`,
+`APP_ORIGIN=http://localhost:5173`, `MONGODB_URI=mongodb://127.0.0.1:27017` and
+`MONGODB_DB_NAME=chosen_school_dev`. It holds no secrets, so it is committed. Node applies later
+`--env-file` flags over earlier ones, which is what makes this a short override rather than a
+second configuration file to keep in sync. (A variable already set in the shell beats both files.)
 
 `server/.env` is gitignored along with `.env.*`, except `.env.development`.
 
-### 5.2 Development and production share one Atlas database
+### 5.2 Development has its own database (ADR-035, 22 November 2026)
 
-`MONGODB_DB_NAME` is the same locally as in production, so **local work reads and writes live
-school data**. That is a deliberate choice, not an oversight: it keeps one database and one set of
-credentials. The trade-off is that a mistaken `seed` or `deleteMany` run locally reaches real
-records.
+> **Superseded.** Until 22 November 2026 this section said development and production
+> deliberately shared one Atlas database. ADR-035 reversed that. The old text is kept in git
+> history; the reasoning for the change is in the ADR.
 
-Mitigations that exist today: `seed` refuses to run when `NODE_ENV=production`; `provision-admin`
-refuses the same; `npm run dev:server` sets `NODE_ENV=development` but the database is unchanged.
+Development runs against a local `mongod` on `127.0.0.1:27017`, database `chosen_school_dev`, data
+kept in `server/.mongo-dev/` (gitignored). First-time setup, from the repository root:
+
+1. `npm run dev:db` — starts the local database and leaves it running (downloads the pinned
+   binary the first time, ~510 MB, unless the tests already have).
+2. In a second terminal: `npm run sync-indexes:dev`, then
+   `ADMIN_EMAIL=... npm run provision-admin:dev`, and optionally `npm run seed:dev`.
+3. `npm run dev:server` and `npm run dev` as before.
+
+**The guard.** With `NODE_ENV=development`, boot refuses a `MONGODB_URI` whose host is not
+`localhost` or `127.0.0.1`, unless `ALLOW_REMOTE_DEV_DB=true`. It catches the override
+being deleted or mistyped, which would otherwise put development back on Atlas silently.
+
+The unsuffixed `seed`, `sync-indexes` and `provision-admin` still load `server/.env` only, and
+still refuse when `NODE_ENV=production` unless given `--force`.
 
 **To confirm which database a running process is on**, read the `database_connected` log line — it
 carries `host`, `database` and `environment`, and never a credential.

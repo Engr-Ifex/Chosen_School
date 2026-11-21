@@ -47,6 +47,8 @@
 | ADR-031 | Admission form field baseline (D-01, D-02) | Accepted |
 | ADR-033 | Rate-limit counters stored in Atlas | Accepted |
 | ADR-032 | Supabase Storage replaces Cloudflare R2 | Accepted |
+| ADR-034 | Photographs included in bulk PDF export | Accepted |
+| ADR-035 | Local development uses its own database, never Atlas | Accepted |
 
 ---
 
@@ -661,5 +663,62 @@ scale that is negligible. The TTL index is housekeeping only — the window is e
 **Rejected:** process memory (resets on restart, and multiple instances would each keep their own
 count); counting only on the `admins` document (gives no per-IP limit and cannot count attempts
 against an email that does not exist, which is exactly the enumeration case worth limiting).
+
+---
+
+### ADR-034 — Photographs included in bulk PDF export
+**Status:** Accepted · **Date:** 2026-11-22 · **Owner decision** · **Related:** ADR-021, ADR-026
+
+**Context.** `API_SPEC.md` §4.2 lists "photo if present" among the PDF contents without separating
+single from bulk. The first implementation embedded the photograph only in the single-record
+export. That was never decided; it was found during the S11 check on 21 November 2026.
+
+**Decision.** A bulk export carries each record's photograph, as the single export does. Health
+information stays out of bulk (ADR-026 is unchanged).
+
+**Consequences.** A bulk file is now a better identification document, and that is also the risk:
+ADR-026's reasoning applies to photographs too. Bulk files are more likely to be emailed or printed
+and left about, and a child's photograph is personal data. The owner accepted this for the
+practical value of a printed list with faces. To keep the file and the memory cost bounded (up to
+50 records on a 512 MB Render instance), photographs are re-encoded at no more than 440 px on the
+long edge. That is about four times the printed size, so print quality is unaffected. A missing or
+unreadable photograph is left out, and the record is still exported.
+
+---
+
+### ADR-035 — Local development uses its own database, never Atlas
+**Status:** Accepted · **Date:** 2026-11-22 · **Owner decision** · **Supersedes:** `ENVIRONMENT_VARIABLES.md` §5.2 (shared database)
+
+**Context.** Until now `npm run dev:server` read `MONGODB_URI` from `server/.env`, so local work
+read and wrote the Atlas cluster intended for production. `ENVIRONMENT_VARIABLES.md` §5.2 recorded
+this as deliberate, to keep one database and one set of credentials. The cost was that a mistaken
+local `seed`, `deleteMany` or test session reached the production database, and that synthetic
+development records would mix with real applications once Stage 2 begins (ARCHITECTURE §15 Q18).
+
+**Decision.**
+- `server/.env.development` sets `MONGODB_URI=mongodb://127.0.0.1:27017` and
+  `MONGODB_DB_NAME=chosen_school_dev`. Development therefore never sees the Atlas URI, even though
+  it still sits in `server/.env`.
+- The local database is the `mongod` binary the test tooling already pins (6.0.14), started with
+  `npm run dev:db` and a persistent data directory `server/.mongo-dev/` (gitignored). No new
+  dependency, and nothing to install by hand.
+- Development variants of the database scripts, `seed:dev`, `sync-indexes:dev` and
+  `provision-admin:dev`, load the same two files. The unsuffixed scripts are unchanged and still
+  target `server/.env`.
+- **Boot refuses a remote database in development.** With `NODE_ENV=development`, a
+  `MONGODB_URI` whose host is not `localhost` or `127.0.0.1` is a configuration error
+  unless `ALLOW_REMOTE_DEV_DB=true`. That variable was already planned in
+  `ENVIRONMENT_VARIABLES.md` §5. The guard catches the override being deleted or mistyped, which
+  would otherwise silently put development back on Atlas.
+
+**Consequences.** Development data and production data cannot mix, and a local mistake cannot
+reach the school's records. The cost: a fresh machine starts with an empty database (indexes, an
+admin and optionally seed data are created with the `:dev` scripts), and developing against a
+second Atlas cluster needs the explicit opt-in. Supabase is not affected yet: storage is the local
+driver until S13, and S13 must keep development on the local driver or on a separate project.
+
+**Rejected:** a second database name on the same Atlas cluster. It still puts production
+credentials on every development run, and one typo in the database name reaches production. A
+second M0 cluster stays possible through `ALLOW_REMOTE_DEV_DB`, but is not the default.
 
 ---

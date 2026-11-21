@@ -830,7 +830,7 @@ reopened without a reason.
 | Q15 | Testimonial name display? | **Open** — school preference |
 | Q16 | Idle session timeout? | Resolved — 60 minutes sliding (ADR-027) |
 | Q17 | How does the administrator move the academic session on? | **Open — known gap** (added 21 November 2026). The server assigns `settings.placement.currentSession`, falling back to `DEFAULT_ACADEMIC_SESSION` (ROADMAP S04 correction), but there is no admin screen to change it. Until S18's settings screen exists, it means editing the settings document or the constant |
-| Q18 | Local development uses the Atlas cluster intended for production | **Open** (added 21 November 2026). `server/.env.development` overrides only `NODE_ENV` and `APP_ORIGIN`, so `npm run dev:server` reads and writes the same cluster and database name as production will. Harmless while no real data exists; must be separated before S14. Changing it also affects how a development admin is provisioned (`provision-admin` loads `.env` only). Owner decision |
+| Q18 | Local development uses the Atlas cluster intended for production | Resolved 22 November 2026 — **ADR-035**. Development uses a local `mongod` (`npm run dev:db`, database `chosen_school_dev`), the `*:dev` scripts provision and seed it, and boot refuses a remote database in development unless `ALLOW_REMOTE_DEV_DB=true` |
 
 **Q13 — resolved.** FR-003 is satisfied by a fixed set of named sections per page, stored in
 `pagecontents` and editable in the dashboard, but not addable, removable, reordered or restyled

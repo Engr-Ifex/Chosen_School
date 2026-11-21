@@ -5,12 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch --env-file=.env --env-file=.env.development src/index.ts",
+    "db": "tsx src/scripts/dev-db.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.test.json",
     "seed": "tsx --env-file=.env src/scripts/seed.ts",
+    "seed:dev": "tsx --env-file=.env --env-file=.env.development src/scripts/seed.ts",
     "sync-indexes": "tsx --env-file=.env src/scripts/sync-indexes.ts",
+    "sync-indexes:dev": "tsx --env-file=.env --env-file=.env.development src/scripts/sync-indexes.ts",
     "provision-admin": "tsx --env-file=.env src/scripts/provision-admin.ts",
+    "provision-admin:dev": "tsx --env-file=.env --env-file=.env.development src/scripts/provision-admin.ts",
     "test": "vitest run"
   },
   "dependencies": {

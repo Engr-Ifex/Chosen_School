@@ -17,6 +17,7 @@
  */
 
 import PDFDocument from 'pdfkit';
+import sharp from 'sharp';
 import type { ApplicationDetailShape } from '../../services/application-edit.js';
 
 const PAGE_MARGIN = 50;
@@ -170,7 +171,13 @@ function drawRecord(
   for (const section of buildSections(record, { includeHealth: options.includeHealth })) {
     if (doc.y > doc.page.height - 120) doc.addPage();
 
-    doc.fillColor('#12324a').font('Helvetica-Bold').fontSize(11).text(section.heading);
+    // The x is explicit: after a row, pdfkit's cursor is left in the value
+    // column, and without it every heading after the first drew there.
+    doc
+      .fillColor('#12324a')
+      .font('Helvetica-Bold')
+      .fontSize(11)
+      .text(section.heading, PAGE_MARGIN, doc.y, { width });
     doc.moveDown(0.35);
 
     for (const row of section.rows) {
@@ -200,6 +207,40 @@ function drawRecord(
     );
 }
 
+/**
+ * Re-encodes a stored photograph as JPEG for embedding.
+ *
+ * Uploads are stored as WebP (S08), and pdfkit embeds only JPEG and PNG. Before
+ * this step every photograph failed inside `doc.image` and was swallowed by the
+ * corrupt-image guard, so no exported PDF ever carried one — while the tests,
+ * which only checked that a missing image did not break the file, passed.
+ *
+ * A photo that cannot be decoded is returned as `null`: the record matters more
+ * than the picture.
+ *
+ * Capped at 440 px on the long edge (ADR-034): about four times the 110 pt it
+ * is printed at, and it keeps a 50-record bulk export small in memory and on
+ * disk.
+ */
+export const PDF_PHOTO_MAX_PX = 440;
+
+export async function toPdfImage(photo: Buffer | null): Promise<Buffer | null> {
+  if (!photo) return null;
+  try {
+    return await sharp(photo)
+      .resize({
+        width: PDF_PHOTO_MAX_PX,
+        height: PDF_PHOTO_MAX_PX,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+  } catch {
+    return null;
+  }
+}
+
 /** Renders one or more records into a single PDF. */
 export async function renderApplicationsPdf(
   records: Array<{ record: ApplicationDetailShape; photo?: Buffer | null }>,
@@ -221,11 +262,14 @@ export async function renderApplicationsPdf(
     doc.on('error', reject);
   });
 
+  // Converted before drawing starts, because pdfkit's drawing is synchronous.
+  const photos = await Promise.all(records.map((entry) => toPdfImage(entry.photo ?? null)));
+
   records.forEach((entry, index) => {
     drawRecord(
       doc,
       entry.record,
-      { includeHealth: options.includeHealth, photo: entry.photo ?? null },
+      { includeHealth: options.includeHealth, photo: photos[index] ?? null },
       index,
     );
   });

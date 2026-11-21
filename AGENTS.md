@@ -7,8 +7,7 @@ Instructions for any AI agent working in this repository. Short by design — de
 ## 1. Repository state — read this first
 
 **The core admissions loop exists; the rest of the product does not.** ROADMAP slices S00–S06 and
-S08–S10 are complete. S07 is blocked on accounts. **S11 (PDF export) is in progress**: the code
-and tests are written, but the slice has not been verified or marked complete.
+S08–S11 are complete. S07 is blocked on accounts.
 
 What exists, checked by inspection on 21 November 2026:
 
@@ -75,12 +74,13 @@ Verified on **28 October 2026**:
 | Task | Command | Result |
 |---|---|---|
 | Install | `npm install` | 157 packages, 0 vulnerabilities |
-| Development | `npm run dev` (client, `:5173`) · `npm run dev:server` (API) | Client served `HTTP 200` |
-| Tests | `npm test` | 293 tests in 32 files — 185 pass, 108 skipped (database integration, opt-in). Re-run 20 November 2026 |
-| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | **Not re-run since S10.** Needs a `mongod` binary; mongodb-memory-server downloads the pinned 6.0.14 on first run. The development machine currently has none |
-| Admin account | `ADMIN_EMAIL=... npm run provision-admin --workspace server` | Creates or rotates the single admin; deletes all sessions on rotation |
-| Seed | `npm run seed --workspace server` | 20 synthetic applications; refuses in production |
-| Indexes | `npm run sync-indexes --workspace server` | Creates declared indexes; `autoIndex` is off by design |
+| Local database | `npm run dev:db` | Local `mongod` on `127.0.0.1:27017`, data in `server/.mongo-dev/` (ADR-035). Verified 22 November 2026 |
+| Development | `npm run dev` (client, `:5173`) · `npm run dev:server` (API) | API connects to `127.0.0.1` / `chosen_school_dev`, no remote connections. Verified 22 November 2026 |
+| Tests | `npm test` | 303 tests in 32 files — 193 pass, 110 skipped (database integration, opt-in). Re-run 22 November 2026 |
+| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | 267 pass in 26 files — re-run 22 November 2026. mongodb-memory-server downloads the pinned 6.0.14 (~510 MB) on first run, to `~/.cache/mongodb-binaries` |
+| Admin account | `ADMIN_EMAIL=... npm run provision-admin:dev` (local) · `provision-admin` (production `.env`) | Creates or rotates the single admin; deletes all sessions on rotation. Piped input: the **whole** of stdin is the password |
+| Seed | `npm run seed:dev` (local) · `seed` (production `.env`, refuses) | 20 synthetic applications |
+| Indexes | `npm run sync-indexes:dev` (local) · `sync-indexes` (production `.env`) | Creates declared indexes; `autoIndex` is off by design. Run once on a fresh local database |
 | Lint | `npm run lint` | 0 problems |
 | Type check | `npm run typecheck` | Both workspaces clean |
 | Build | `npm run build` | Client bundle + server `dist/` |
@@ -90,15 +90,20 @@ Verified on **28 October 2026**:
 deletion had to be repaired with `npm install`. `npm ci --dry-run` resolves the lockfile without
 error. Confirm it on CI or a clean machine before depending on it.
 
-**`server/.env` holds the real configuration; `server/.env.development` overrides two values.**
-`npm run dev:server` loads `--env-file=.env --env-file=.env.development`; Node applies later files
-over earlier ones, so development gets `NODE_ENV=development` and `APP_ORIGIN=http://localhost:5173`
-while Atlas, Supabase, the buckets and the port still come from `server/.env`. That file is never
-rewritten by development. Production reads no file at all: `npm start` is `node dist/index.js` and
-Render supplies everything.
+**Development never touches Atlas (ADR-035).** `npm run dev:server` and the `*:dev` scripts load
+`--env-file=.env --env-file=.env.development`; Node applies later files over earlier ones, so
+development gets `NODE_ENV=development`, `APP_ORIGIN=http://localhost:5173` and the local database
+(`mongodb://127.0.0.1:27017`, `chosen_school_dev`). Supabase, the buckets and the port still come
+from `server/.env`, which development never rewrites. **Boot refuses a non-local `MONGODB_URI` in
+development** unless `ALLOW_REMOTE_DEV_DB=true`. Production reads no file at all: `npm start` is
+`node dist/index.js` and Render supplies everything.
 
-**`seed`, `sync-indexes` and `provision-admin` load `.env` only.** They are database operations, and
-`provision-admin` relies on seeing `NODE_ENV=production` to refuse a careless run.
+**The unsuffixed `seed`, `sync-indexes` and `provision-admin` load `.env` only**, which is the
+production configuration. They refuse when `NODE_ENV=production` unless given `--force`. For local
+work, use the `:dev` variants.
+
+**`src/scripts/dev-db.ts` imports a devDependency**, so it is excluded from `server/tsconfig.json`
+(the production build). Do the same for any other development-only script.
 
 **Three conventions that will bite if forgotten:**
 

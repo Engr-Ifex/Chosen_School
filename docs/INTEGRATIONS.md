@@ -95,7 +95,7 @@ connects with it and succeeds.
 | **Provider** | MongoDB Atlas, Free tier (M0) |
 | **Purpose** | System of record: applications, enquiries, visits, content, sessions, audit |
 | **Affected features** | Every feature that reads or writes data — effectively all of them |
-| **Status** | **Configured** (21 November 2026) — `server/.env` holds a `mongodb+srv://` URI for an Atlas cluster and `MONGODB_DB_NAME=chosen_school`. V-01 and V-02 not run, so the connection, the user's role (`readWrite` only?) and the network rule are unproven. Local development currently uses this same cluster — see ARCHITECTURE §15 Q18 |
+| **Status** | **Configured** (21 November 2026) — `server/.env` holds a `mongodb+srv://` URI for an Atlas cluster and `MONGODB_DB_NAME=chosen_school`. V-01 and V-02 not run, so the connection, the user's role (`readWrite` only?) and the network rule are unproven. Since 22 November 2026, local development no longer uses this cluster; it runs on a local `mongod` (ADR-035) |
 | **Connection method** | Mongoose over the `mongodb+srv://` connection string, TLS required |
 | **Documentation** | https://www.mongodb.com/docs/atlas/ · https://www.mongodb.com/docs/atlas/driver-connection/ |
 | **Prerequisites** | Atlas account. One M0 cluster. A database user. A network access rule |

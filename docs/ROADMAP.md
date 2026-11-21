@@ -70,10 +70,8 @@ Every slice states the same eleven things:
 | S19 | School information content | S18 | No |
 | S20 | Accessibility, responsive, Stage 1 gate | S14, **S15**, S16–S19 | Yes |
 
-**Progress (21 Nov 2026):** S00–S06 and S08–S10 complete. **S07 blocked** on Vercel and Render
-accounts. **S11 in progress** — code and tests written, verification outstanding. Next after S11:
-S12. The database integration tests need a local `mongod`, which the development machine does not
-currently have.
+**Progress (21 Nov 2026):** S00–S06 and S08–S11 complete. **S07 blocked** on Vercel and Render
+accounts. Next: S12.
 
 ---
 
@@ -270,7 +268,8 @@ so a refused request never buffers an upload. The same change added the two miss
 operation (DATA_MODEL §13a). Tests: `middleware/rate-limit.test.ts` and
 `routes/public/applications.origin.test.ts` run on every `npm test`;
 `middleware/rate-limit.db.test.ts` (parallel burst, window reset, per-IP, PDF limit) needs
-`RUN_DB_TESTS=1` and **has not yet been run** — no `mongod` on the development machine.
+`RUN_DB_TESTS=1`. **Run 21 November 2026: all pass**, including 20 parallel attempts admitting
+exactly 5.
 
 **Open concern for the owner:** many Nigerian mobile networks put large numbers of users behind
 one shared IP (carrier-grade NAT). At 5 per hour per IP, parents on the same network could block
@@ -538,7 +537,7 @@ editing once — the array stays at 50, the newest entry is the edit, and the do
 under DB-10's 1 MB bound.
 
 ### S11 — PDF export
-**Status:** In progress — code written, **not verified** (21 November 2026)
+**Status:** Complete — 21 November 2026
 **Outcome** — An application prints or exports as a clean PDF, singly or in bulk.
 **Covers** — FR-020.
 **Depends on** — S06.
@@ -559,12 +558,35 @@ behind an explicit `includeHealth` parameter), `GET /admin/applications/:id/pdf`
 in the list and detail views. The 20-per-hour export limit from `API_SPEC` §1.8 was added on 20
 November (see the S03 correction).
 
-**Outstanding before this slice is complete:**
-- Run `routes/pdf.test.ts` (API-A26, API-A27, E2E-05, E2E-06, S-05) with `RUN_DB_TESTS=1` — it has
-  never been run on this machine. The builder tests in `lib/pdf/application-pdf.test.ts` (S-06,
-  health excluded from bulk) do run on every `npm test` and pass.
-- Perform the DoD by hand and record it here.
-- Commit as its own change.
+**Completion note (21 Nov 2026).** `routes/pdf.test.ts` (API-A26, API-A27, E2E-05, E2E-06, S-05)
+and the builder tests (S-06, health excluded from bulk) pass with `RUN_DB_TESTS=1`.
+
+**The DoD was performed against the running app**, using a throwaway local `mongod` and synthetic
+records, never Atlas. Three applications were submitted through the public API, each with a marked
+health note, one with a photograph. In the dashboard, *Export selected (3)* and the detail view's
+*Export PDF* both returned `200` with no console errors. The same files were then fetched and read:
+
+| File | Pages | Health note | Photo | Headers |
+|---|---|---|---|---|
+| Single (`application-TEST-Alpha-<id>.pdf`) | 1 | present | **embedded** | `application/pdf`, `attachment`, `no-store`, `nosniff` |
+| Bulk (`applications-3.pdf`) | 3, one per record | **absent from all three** | none | same |
+
+**Two defects found by doing it, both fixed in this slice:**
+- *No PDF had ever carried a photograph.* Uploads are stored as WebP (S08); `pdfkit` embeds only
+  JPEG and PNG, so `doc.image` threw and the corrupt-image guard swallowed the error. The existing
+  tests only proved a *missing* photo did not break the file. Photos are now re-encoded to JPEG with
+  `sharp` before drawing (`toPdfImage`), and a test asserts a WebP photo becomes an embedded image.
+- *Every section heading after the first was drawn in the value column*, because `pdfkit` left its
+  cursor there after the last row. Headings now take an explicit x, and a test checks each heading's
+  position on the page.
+
+Both new tests fail against the previous code and pass now.
+
+**Bulk photographs — decided 22 Nov 2026 (ADR-034).** The bulk export now carries each record's
+photograph, re-encoded at no more than 440 px. Health information stays out of bulk (ADR-026). New
+DB tests in `routes/photo.test.ts` check that a bulk export of three records, two with photographs,
+embeds exactly two images, and that a single export embeds one. The bulk test fails against the
+previous route code.
 
 ### S12 — Enquiries and visit requests
 **Outcome** — Visitors can enquire and request a visit; the administrator manages both in separate inboxes.
