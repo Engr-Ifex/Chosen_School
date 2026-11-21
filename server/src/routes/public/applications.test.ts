@@ -15,6 +15,7 @@ import { DEFAULT_ACADEMIC_SESSION } from '../../config/school.js';
 import { connectDatabase, disconnectDatabase } from '../../db.js';
 import { createLogger } from '../../logger.js';
 import { Application } from '../../models/application.js';
+import { RateLimit } from '../../models/ratelimit.js';
 import { SETTINGS_KEY, Settings } from '../../models/settings.js';
 
 const logger = createLogger('error');
@@ -68,7 +69,13 @@ describe.skipIf(!run)('POST /api/v1/public/applications', () => {
   });
 
   beforeEach(async () => {
-    await Promise.all([Application.deleteMany({}), Settings.deleteMany({})]);
+    // Counters cleared too: this file submits more than the 5-per-hour limit
+    // from one address. The limit itself is tested in rate-limit.db.test.ts.
+    await Promise.all([
+      Application.deleteMany({}),
+      Settings.deleteMany({}),
+      RateLimit.deleteMany({}),
+    ]);
   });
 
   it('accepts a valid submission and persists it (API-P07)', async () => {

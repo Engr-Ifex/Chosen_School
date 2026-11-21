@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { AppError } from '../../errors.js';
 import { pdfFilename, renderApplicationsPdf } from '../../lib/pdf/application-pdf.js';
 import { getStorage } from '../../lib/storage/index.js';
+import { bySession, LIMITS, rateLimit } from '../../middleware/rate-limit.js';
 import { Application } from '../../models/application.js';
 import {
   applicationEditSchema,
@@ -119,6 +120,12 @@ function sendPdf(res: import('express').Response, buffer: Buffer, filename: stri
 
 export function adminApplicationsRouter(): Router {
   const router = Router();
+
+  // 20 exports per hour per session (API_SPEC §1.8). Each export is the most
+  // personal data that leaves the server in one response, and the most
+  // expensive to render, so it has its own, tighter limit on top of the
+  // general admin ceiling applied at the mount point.
+  const pdfLimit = rateLimit({ name: 'admin:pdf', ...LIMITS.adminPdf, keyFor: bySession });
 
   router.get('/applications', async (req, res) => {
     const parsed = listQuerySchema.safeParse(req.query);
@@ -266,7 +273,7 @@ export function adminApplicationsRouter(): Router {
    * `404`, not a quietly smaller file. Both produce something that looks
    * complete and is not, which is worse than an error.
    */
-  router.get('/applications/pdf', async (req, res) => {
+  router.get('/applications/pdf', pdfLimit, async (req, res) => {
     const raw = typeof req.query.ids === 'string' ? req.query.ids : '';
     const ids = raw
       .split(',')
@@ -318,8 +325,10 @@ export function adminApplicationsRouter(): Router {
    * Single-record export. This is the only PDF that carries health information,
    * because it is exported deliberately, one record at a time.
    */
-  router.get('/applications/:id/pdf', async (req, res) => {
-    const { id } = req.params;
+  router.get('/applications/:id/pdf', pdfLimit, async (req, res) => {
+    // With middleware in front, Express no longer infers the path parameter's
+    // type; the format check below is what actually validates it.
+    const id = typeof req.params.id === 'string' ? req.params.id : '';
 
     if (!/^[0-9a-fA-F]{24}$/.test(id)) {
       throw new AppError('VALIDATION_ERROR', 'That application id is not valid.', {

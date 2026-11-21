@@ -6,11 +6,22 @@ Instructions for any AI agent working in this repository. Short by design — de
 
 ## 1. Repository state — read this first
 
-**Authentication, uploads, deletion and editing exist; the product does not.** ROADMAP slices S00–S10 are complete:/n`GET /api/v1/health`, `POST /api/v1/public/applications`, configuration validation, the error
-envelope, request logging, four Mongoose models with a synthetic seed. There are no admin routes,
-no authentication and no real pages yet.
+**The core admissions loop exists; the rest of the product does not.** ROADMAP slices S00–S06 and
+S08–S10 are complete. S07 is blocked on accounts. **S11 (PDF export) is in progress**: the code
+and tests are written, but the slice has not been verified or marked complete.
 
-Verified by inspection on 28 October 2026:
+What exists, checked by inspection on 21 November 2026:
+
+- **Public:** the admission form (with optional photo), `POST /api/v1/public/applications`,
+  `GET /api/v1/public/placement-options`, `GET /api/v1/health`.
+- **Admin:** single-administrator sign-in with sessions and CSRF protection; the application list,
+  detail, edit (with revision history), photo streaming, trash, restore, permanent delete, and
+  single and bulk PDF export.
+- **Not yet built:** enquiries and visits (S12), announcements and events, gallery, FAQs,
+  testimonials, settings and school content screens (S16–S19). Storage still uses the local
+  driver; Supabase is S13. Nothing is deployed.
+
+Toolchain, verified by inspection on 28 October 2026:
 
 - `client/` and `server/` exist as npm workspaces with a single lockfile at the root.
 - Git repository initialised; default branch `main`.
@@ -46,8 +57,8 @@ files — link to it.
 
 | Path | Contents | Created by | Notes |
 |---|---|---|---|
-| `client/` | React application | Developer | Not created yet. Root directory for the Vercel build |
-| `server/` | Express API | Developer | Not created yet. Root directory for the Render service |
+| `client/` | React application | Developer | Root directory for the Vercel build |
+| `server/` | Express API | Developer | Root directory for the Render service |
 | `docs/` | Approved planning documents | Shared | Source of truth. Changes follow §11 |
 | `.env.example` | Configuration template | Developer | Placeholders only, never real values |
 | `AGENTS.md` | This file | Shared | Root-level rules only |
@@ -65,8 +76,8 @@ Verified on **28 October 2026**:
 |---|---|---|
 | Install | `npm install` | 157 packages, 0 vulnerabilities |
 | Development | `npm run dev` (client, `:5173`) · `npm run dev:server` (API) | Client served `HTTP 200` |
-| Tests | `npm test` | 249 tests in 27 files — 158 pass, 91 skipped (database integration, opt-in) |
-| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | 213 pass, requires a `mongod` binary |
+| Tests | `npm test` | 293 tests in 32 files — 185 pass, 108 skipped (database integration, opt-in). Re-run 20 November 2026 |
+| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | **Not re-run since S10.** Needs a `mongod` binary; mongodb-memory-server downloads the pinned 6.0.14 on first run. The development machine currently has none |
 | Admin account | `ADMIN_EMAIL=... npm run provision-admin --workspace server` | Creates or rotates the single admin; deletes all sessions on rotation |
 | Seed | `npm run seed --workspace server` | 20 synthetic applications; refuses in production |
 | Indexes | `npm run sync-indexes --workspace server` | Creates declared indexes; `autoIndex` is off by design |

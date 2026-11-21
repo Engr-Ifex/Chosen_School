@@ -12,6 +12,7 @@ import { requestContext } from './middleware/request.js';
 import type { Logger } from './logger.js';
 import { requireSession } from './middleware/auth.js';
 import { checkOriginAndCsrf } from './middleware/csrf.js';
+import { bySession, LIMITS, rateLimit } from './middleware/rate-limit.js';
 import { adminApplicationsRouter } from './routes/admin/applications.js';
 import { authRouter } from './routes/auth.js';
 import { healthRouter, type HealthProbe } from './routes/health.js';
@@ -93,6 +94,10 @@ export function createApp(options: AppOptions): Express {
   app.use(
     '/api/v1/admin',
     requireSession({ sessionCookieName }),
+    // A ceiling per session, mostly to stop a runaway client (API_SPEC §1.8).
+    // After the session check, so it is keyed on a real session and an
+    // unauthenticated flood never reaches the counter.
+    rateLimit({ name: 'admin', ...LIMITS.adminRequests, keyFor: bySession }),
     // Every admin mutation carries a CSRF token and an origin check. Applied at
     // the mount point so a route added later cannot be born unprotected; the
     // middleware ignores safe methods, so reads are unaffected.
@@ -100,7 +105,7 @@ export function createApp(options: AppOptions): Express {
     adminApplicationsRouter(),
   );
   app.use('/api/v1/public', publicPlacementOptionsRouter());
-  app.use('/api/v1/public', publicApplicationsRouter());
+  app.use('/api/v1/public', publicApplicationsRouter({ appOrigin }));
 
   app.use(notFoundHandler);
   app.use(errorHandler(logger));

@@ -2,8 +2,10 @@
 
 Public website and private administrator dashboard for Chosen School (Primary and Secondary).
 
-**Status:** planning complete and approved. The repository scaffold exists (ROADMAP slice S00).
-No product behaviour is implemented yet.
+**Status (21 November 2026):** the core admissions loop runs locally. A parent can submit the
+admission form, and the administrator can sign in, review, edit, trash, restore and permanently
+delete applications. ROADMAP slices S00–S06 and S08–S10 are complete and S11 (PDF export) is in
+progress. Nothing is deployed. The current position is in `docs/ROADMAP.md` §3.
 
 ## Structure
 

@@ -600,7 +600,7 @@ authenticated or not, and it is enforced by middleware applied to the `/admin` r
 | Origin + CSRF check | every `POST`/`PATCH`/`DELETE` |
 | Rate limiting | every public write, login, PDF export |
 | No personal data in logs | every endpoint |
-| No personal data in URLs or query strings | every endpoint — hence `POST` for bulk PDF, not `GET` with a filter payload |
+| No personal data in URLs or query strings | every endpoint — bulk PDF takes opaque ids, never a filter payload such as a name or class (see the exception below) |
 | `no-store` on private responses | photo, PDF, application detail |
 | Constant-time comparison | CSRF token, session token hash lookup |
 
@@ -608,6 +608,12 @@ authenticated or not, and it is enforced by middleware applied to the `/admin` r
 record identifiers in the URL and therefore in logs. This is accepted because the ids are opaque
 ObjectIds, not personal data, and a `GET` is required for a browser download. The trade-off is
 recorded rather than hidden.
+
+**Note (21 November 2026) — the premise no longer holds.** The dashboard does not download by
+link. It calls `fetch`, then saves the response as a blob (`client/src/lib/admin-api.ts`,
+`downloadPdf`), and that works the same with `POST`. Switching bulk export to `POST` with the ids
+in the body would remove the exception and keep ids out of request logs. The endpoint is
+unchanged until the owner decides; recorded so the next change does not rely on the old reason.
 
 ---
 

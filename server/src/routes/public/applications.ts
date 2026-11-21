@@ -19,13 +19,17 @@
  * leaves nothing behind. `limits.fileSize` stops Multer at 5 MB rather than
  * buffering an arbitrarily large body first.
  *
- * No authentication, by design: this is a public form. Abuse control is rate
- * limiting (S09), not auth.
+ * No authentication, by design: this is a public form. Abuse control is the
+ * origin check plus a per-IP rate limit (API_SPEC §1.8, §2), both applied
+ * **before** the body is parsed, so a flood is turned away before Multer
+ * buffers up to 5 MB per request.
  */
 
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import multer from 'multer';
 import { AppError } from '../../errors.js';
+import { checkOriginAndCsrf } from '../../middleware/csrf.js';
+import { byIp, LIMITS, rateLimit } from '../../middleware/rate-limit.js';
 import { admissionInputSchema, toFieldErrors } from '../../schemas/admission.js';
 import { submitApplication } from '../../services/admissions.js';
 import { MAX_PHOTO_BYTES } from '../../services/uploads.js';
@@ -70,10 +74,24 @@ function parseBody(req: Request, res: Response, next: NextFunction): void {
   });
 }
 
-export function publicApplicationsRouter(): Router {
+export interface PublicApplicationsOptions {
+  /** The site origin; a mutating request from anywhere else is refused. */
+  appOrigin: string;
+}
+
+export function publicApplicationsRouter(options: PublicApplicationsOptions): Router {
   const router = Router();
 
-  router.post('/applications', parseBody, async (req, res) => {
+  // Unauthenticated, so there is no session to bind a CSRF token to: origin
+  // and `Sec-Fetch-Site` only (csrf.ts).
+  const originOnly = checkOriginAndCsrf({ appOrigin: options.appOrigin, requireToken: false });
+  const submitLimit = rateLimit({
+    name: 'submit:application',
+    ...LIMITS.applicationSubmit,
+    keyFor: byIp,
+  });
+
+  router.post('/applications', originOnly, submitLimit, parseBody, async (req, res) => {
     const parsed = admissionInputSchema.safeParse(req.body);
 
     if (!parsed.success) {

@@ -582,7 +582,7 @@ on the school's behalf.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `key` | String | yes | Namespaced, e.g. `login:ip:203.0.113.7`, `login:email:a@b.test`. Unique |
+| `key` | String | yes | Namespaced, e.g. `login:ip:203.0.113.7`, `login:email:a@b.test`, `submit:application:ip:203.0.113.7`, `admin:session:<sessionId>`, `admin:pdf:session:<sessionId>`. Unique |
 | `count` | Number | yes | Attempts inside the current window |
 | `windowStart` | Date | yes | Start of the fixed window. Compared on every read — never rely on TTL |
 | `expiresAt` | Date | yes | `windowStart + window`, for TTL housekeeping only |
@@ -592,9 +592,17 @@ on the school's behalf.
 **Never stored:** the password, the submitted email in clear beyond the counter key, or any
 request body. A counter key containing an email is the minimum needed to rate-limit per account.
 
-**Why a fixed window:** it is one atomic `$inc` plus one read, and the failure mode (a burst
+**Why a fixed window:** it is one atomic operation per attempt, and the failure mode (a burst
 across a window boundary) is acceptable for login. A sliding window would need a document per
 attempt.
+
+**One operation, not a read then a write (corrected 20 November 2026).** Each attempt is a single
+`findOneAndUpdate` with an aggregation-pipeline update that either starts a new window
+(`count: 1`) or increments the live one, with `upsert`. The allow/deny decision is taken from the
+document that operation returns. The first implementation read the count and wrote it in two calls,
+so parallel requests could all see the same count and all be allowed. Blocked attempts are counted
+too; that cannot extend the window, which is fixed from `windowStart`. No schema change: the fields
+and indexes are unchanged.
 
 ---
 

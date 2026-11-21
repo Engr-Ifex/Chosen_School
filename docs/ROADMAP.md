@@ -70,8 +70,10 @@ Every slice states the same eleven things:
 | S19 | School information content | S18 | No |
 | S20 | Accessibility, responsive, Stage 1 gate | S14, **S15**, S16–S19 | Yes |
 
-**Progress:** S00 (28 Oct) and S01 (31 Oct) complete. **Next slice: S02** — data layer, models and
-synthetic seed. Note that S02 needs a database, and the local `mongod` situation is unresolved.
+**Progress (21 Nov 2026):** S00–S06 and S08–S10 complete. **S07 blocked** on Vercel and Render
+accounts. **S11 in progress** — code and tests written, verification outstanding. Next after S11:
+S12. The database integration tests need a local `mongod`, which the development machine does not
+currently have.
 
 ---
 
@@ -259,7 +261,23 @@ S08. S03 accepts `application/json` only, which matches API-P07 ("valid, no phot
 session lists, so no submission can be validated. Blaming the parent's form for an unconfigured
 server would be wrong.
 
+**Correction (20 Nov 2026) — abuse controls were missing.** `API_SPEC` §1.8 and §2 require every
+public write to be origin-checked and rate-limited; `POST /public/applications` had neither. Its
+code comment deferred rate limiting to "S09", which became the Trash slice, so it was never built.
+Now: origin and `Sec-Fetch-Site` check, then 5 per hour per IP, both **before** the body is parsed
+so a refused request never buffers an upload. The same change added the two missing admin limits
+(20 PDF exports and 600 requests per hour per session) and made the limiter a single atomic
+operation (DATA_MODEL §13a). Tests: `middleware/rate-limit.test.ts` and
+`routes/public/applications.origin.test.ts` run on every `npm test`;
+`middleware/rate-limit.db.test.ts` (parallel burst, window reset, per-IP, PDF limit) needs
+`RUN_DB_TESTS=1` and **has not yet been run** — no `mongod` on the development machine.
+
+**Open concern for the owner:** many Nigerian mobile networks put large numbers of users behind
+one shared IP (carrier-grade NAT). At 5 per hour per IP, parents on the same network could block
+each other. The number is the approved one and is unchanged; it should be watched in S14/T3.
+
 ### S04 — Admission form UI — first end-to-end
+**Status:** Complete — 2 November 2026 · corrected 3 November 2026 (see below)
 **Outcome** — **A parent can complete the form and see the exact success message.** The product's first user-visible promise is kept.
 **Covers** — FR-005, FR-007 to FR-013.
 **Depends on** — S03.
@@ -520,6 +538,7 @@ editing once — the array stays at 50, the newest entry is the edit, and the do
 under DB-10's 1 MB bound.
 
 ### S11 — PDF export
+**Status:** In progress — code written, **not verified** (21 November 2026)
 **Outcome** — An application prints or exports as a clean PDF, singly or in bulk.
 **Covers** — FR-020.
 **Depends on** — S06.
@@ -532,6 +551,20 @@ under DB-10's 1 MB bound.
 **Verify** — API-A26, API-A27, S-05, S-06, E2E-05, E2E-06.
 **Risks / rollback** — Layout drift from the web view. Accept it; the PDF is a fixed form, not a mirror of the UI.
 **DoD** — Open both a single and a bulk PDF and confirm the content and the exclusion.
+
+**Progress note (21 Nov 2026).** The code arrived early, inside the S10 commit (`37f48a5`), without
+this slice being marked. What exists: `lib/pdf/application-pdf.ts` (`pdfkit`, health information
+behind an explicit `includeHealth` parameter), `GET /admin/applications/:id/pdf` and
+`GET /admin/applications/pdf?ids=` (50-id cap, unknown id → `404`, `no-store`), and export buttons
+in the list and detail views. The 20-per-hour export limit from `API_SPEC` §1.8 was added on 20
+November (see the S03 correction).
+
+**Outstanding before this slice is complete:**
+- Run `routes/pdf.test.ts` (API-A26, API-A27, E2E-05, E2E-06, S-05) with `RUN_DB_TESTS=1` — it has
+  never been run on this machine. The builder tests in `lib/pdf/application-pdf.test.ts` (S-06,
+  health excluded from bulk) do run on every `npm test` and pass.
+- Perform the DoD by hand and record it here.
+- Commit as its own change.
 
 ### S12 — Enquiries and visit requests
 **Outcome** — Visitors can enquire and request a visit; the administrator manages both in separate inboxes.

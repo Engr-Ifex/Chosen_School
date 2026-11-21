@@ -27,6 +27,7 @@ const { createLogger } = await import('../logger.js');
 const { Admin } = await import('../models/admin.js');
 const { Application } = await import('../models/application.js');
 const { Session } = await import('../models/session.js');
+const { RateLimit } = await import('../models/ratelimit.js');
 
 const logger = createLogger('error');
 const run = process.env.RUN_DB_TESTS === '1';
@@ -82,7 +83,14 @@ describe.skipIf(!run)('photo upload', () => {
   });
 
   beforeEach(async () => {
-    await Promise.all([Admin.deleteMany({}), Application.deleteMany({}), Session.deleteMany({})]);
+    // Counters cleared too: this file submits more than the 5-per-hour public
+    // limit from one address, and the limit is not what it is testing.
+    await Promise.all([
+      Admin.deleteMany({}),
+      Application.deleteMany({}),
+      Session.deleteMany({}),
+      RateLimit.deleteMany({}),
+    ]);
 
     const hashed = await hashPassword(PASSWORD);
     await Admin.create({

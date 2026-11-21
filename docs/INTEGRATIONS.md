@@ -2,12 +2,13 @@
 
 **Document status:** Living record
 **Version:** 1.0
-**Last updated:** 29 October 2026
+**Last updated:** 21 November 2026
 **Owner of this document:** technical planning
 
 > Every external service the product depends on, with its current status. A service is only
-> **Verified** when a real connection has been made and the result recorded here. Nothing in this
-> register has been connected yet — no accounts exist, and no credentials have been created.
+> **Verified** when a real connection has been made and the result recorded here. As of 21
+> November 2026, GitHub is verified. Atlas and Supabase credentials are present in `server/.env`
+> but no connection has been proven (**Configured**). Vercel and Render accounts do not exist.
 
 ---
 
@@ -33,11 +34,11 @@ connects with it and succeeds.
 
 | # | Service | Purpose | Requirement | Status |
 |---|---|---|---|---|
-| I-01 | GitHub | Source control, deploy trigger | Required | Awaiting my action |
-| I-02 | MongoDB Atlas | Primary database | Required | Awaiting my action |
+| I-01 | GitHub | Source control, deploy trigger | Required | **Verified** (21 Nov 2026) — host authorisation for Vercel/Render still pending |
+| I-02 | MongoDB Atlas | Primary database | Required | **Configured** — not verified |
 | I-03 | Vercel | Frontend hosting | Required | Awaiting my action |
 | I-04 | Render | API hosting | Required | Awaiting my action |
-| I-05 | Supabase Storage | Private admission files and public gallery images | Required | Awaiting my action |
+| I-05 | Supabase Storage | Private admission files and public gallery images | Required | **Configured** — not verified |
 | I-06 | Supabase Storage (backup project) | Off-site encrypted backups | Required | Awaiting my action — **D-12** |
 | I-07 | Local backup toolchain | `mongodump` + `age` + upload script | Required | Planned |
 | I-08 | Uptime monitoring | Availability alerting | Required for Stage 1 launch | Deferred |
@@ -69,7 +70,7 @@ connects with it and succeeds.
 | **Provider** | GitHub |
 | **Purpose** | Source control and the deploy trigger for both Vercel and Render |
 | **Affected features** | All. No deployment is possible without a repository |
-| **Status** | Awaiting my action |
+| **Status** | **Verified** 21 November 2026 — `git remote -v` shows `origin`, and `git ls-remote origin main` returned the same commit as local `main` (`37f48a5`), so a push has succeeded. Step 4 (authorising Vercel and Render) cannot happen until those accounts exist. Repository visibility and branch protection not checked |
 | **Connection method** | Git over HTTPS or SSH from the developer machine; provider-to-repo authorisation inside Vercel and Render |
 | **Documentation** | https://docs.github.com |
 | **Prerequisites** | GitHub account. A repository named for the project |
@@ -94,7 +95,7 @@ connects with it and succeeds.
 | **Provider** | MongoDB Atlas, Free tier (M0) |
 | **Purpose** | System of record: applications, enquiries, visits, content, sessions, audit |
 | **Affected features** | Every feature that reads or writes data — effectively all of them |
-| **Status** | Awaiting my action |
+| **Status** | **Configured** (21 November 2026) — `server/.env` holds a `mongodb+srv://` URI for an Atlas cluster and `MONGODB_DB_NAME=chosen_school`. V-01 and V-02 not run, so the connection, the user's role (`readWrite` only?) and the network rule are unproven. Local development currently uses this same cluster — see ARCHITECTURE §15 Q18 |
 | **Connection method** | Mongoose over the `mongodb+srv://` connection string, TLS required |
 | **Documentation** | https://www.mongodb.com/docs/atlas/ · https://www.mongodb.com/docs/atlas/driver-connection/ |
 | **Prerequisites** | Atlas account. One M0 cluster. A database user. A network access rule |
@@ -169,7 +170,7 @@ connects with it and succeeds.
 | **Provider** | Supabase Storage — **file storage only**, not Supabase Database |
 | **Purpose** | Private admission photographs and approved private admission files; public gallery images |
 | **Affected features** | FR-007–FR-013 (upload), FR-019–FR-022 (admin viewing), FR-030 (gallery) |
-| **Status** | Awaiting my action — **selected** (ADR-032); no project, bucket or key exists yet |
+| **Status** | **Configured** (21 November 2026) — selected (ADR-032). `server/.env` holds `SUPABASE_URL`, a service-role key and the bucket names `admissions-private` / `gallery-public`. Whether the buckets exist with the right public/private setting and limits is unproven: V-03 and V-04 not run. This is what S13 needs to start |
 | **Connection method** | `@supabase/supabase-js` from the Express server, `storage.from(bucket)` |
 | **Documentation** | https://supabase.com/docs/guides/storage |
 | **Prerequisites** | Supabase account and one project. Two buckets |
@@ -347,11 +348,12 @@ to paste secrets into this conversation.
 
 ## 7. Verification log
 
-Nothing has been verified. This table is filled in as each check is actually run.
+None of V-01 to V-09 has been run. GitHub (I-01) was verified separately on 21 November 2026 — see
+its entry in §3. This table is filled in as each check is actually run.
 
 | # | Check | Command / method | Expected | Actual | Date |
 |---|---|---|---|---|---|
-| V-01 | Atlas connection | scratch write/read/delete script | Document round-trips | **Not run** — no credentials | — |
+| V-01 | Atlas connection | scratch write/read/delete script | Document round-trips | **Not run** — credentials now present in `server/.env` (21 Nov 2026) | — |
 | V-02 | Atlas rejects bad credentials | connect with wrong password | Auth error, no data leak | **Not run** | — |
 | V-03 | Private bucket is not public | unauthenticated `GET` on the public-path form of a private object | `400`/`403`/`404` — never the file | **Not run** | — |
 | V-04 | Public bucket serves gallery images | unauthenticated `GET` on a public object URL | `200` with the image | **Not run** | — |
