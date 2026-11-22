@@ -116,7 +116,10 @@ work, use the `:dev` variants.
   extension** even though the source is `.ts` — `import { start } from './index.js'`.
 - Only `client/src` and `server/src` are compiled. New top-level source directories need adding
   to the relevant `tsconfig.json`.
-- **`typescript`, `@types/node` and `@types/express` are `dependencies`, not `devDependencies`.**
+- **`typescript` and every `@types/*` package the build needs (`@types/node`, `@types/express`,
+  `@types/multer`, `@types/pdfkit`) are `dependencies`, not `devDependencies`.** Forgetting this for
+  multer and pdfkit broke the Render build on 22 November 2026; `server/src/build-deps.test.ts` now
+  fails if it happens again.
   Render may build from a production-only install, where devDependencies are absent and the build
   fails with `TS2688`. Do not move them back without also changing the build environment. Test-only
   packages stay in `devDependencies`, and `server/tsconfig.json` excludes `*.test.ts` so the build

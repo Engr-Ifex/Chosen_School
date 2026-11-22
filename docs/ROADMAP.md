@@ -757,6 +757,13 @@ the client bundle hash matched a local build. Checked from outside, with no acco
 3. T1: sign in at `chosenschool.vercel.app` in desktop Safari and on an iPhone, and confirm the
    steps in TEST_PLAN §7.
 
+**Render build failure, fixed 22 Nov 2026.** Redeploying `ee4eda8` failed at `tsc`: `@types/multer`
+(S08) and `@types/pdfkit` (S11) were devDependencies, which Render does not install. The local build
+had passed because a local install includes them. Both are now dependencies. A clean copy
+installed with `NODE_ENV=production` (no `vitest`, as on Render) then built `dist/` without errors.
+`server/src/build-deps.test.ts` fails if any package the build imports, or its types, is a
+devDependency. It was confirmed to fail against the old `package.json`.
+
 **Found in passing:** the admin application detail page never displays the photograph. The API
 streams it (S08), but no UI shows it. To fix in a later slice.
 
