@@ -96,7 +96,8 @@ async function readPassword(): Promise<string> {
 }
 
 async function main(): Promise<void> {
-  const config = loadConfig();
+  // Database only: storage settings are irrelevant here (LoadConfigOptions).
+  const config = loadConfig(process.env, { storage: false });
 
   if (config.nodeEnv === 'production' && !process.argv.includes('--force')) {
     process.stderr.write(

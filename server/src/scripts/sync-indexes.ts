@@ -38,7 +38,8 @@ const models = [
 ] as const;
 
 async function main(): Promise<void> {
-  const config = loadConfig();
+  // Database only: storage settings are irrelevant here (LoadConfigOptions).
+  const config = loadConfig(process.env, { storage: false });
   await connectDatabase(config.mongoUri, config.mongoDbName);
 
   for (const [name, model] of models) {

@@ -7,7 +7,7 @@ Instructions for any AI agent working in this repository. Short by design — de
 ## 1. Repository state — read this first
 
 **Admissions, enquiries and visit requests exist; the rest of the product does not.** ROADMAP slices S00–S06 and
-S08–S12 are complete. S07 is blocked on accounts.
+S08–S13 are complete. S07 is blocked on accounts.
 
 What exists, checked by inspection on 22 November 2026:
 
@@ -18,8 +18,9 @@ What exists, checked by inspection on 22 November 2026:
   detail, edit (with revision history), photo streaming, trash, restore, permanent delete, and
   single and bulk PDF export; the enquiry and visit-request inboxes (status, archive).
 - **Not yet built:** the dashboard, announcements and events, gallery, FAQs,
-  testimonials, settings and school content screens (S16–S19). Storage still uses the local
-  driver; Supabase is S13. Nothing is deployed.
+  testimonials, settings and school content screens (S16–S19). Storage: production uses Supabase
+  (S13, verified against the real buckets 22 November 2026); development uses the local driver.
+  Nothing is deployed.
 
 Toolchain, verified by inspection on 28 October 2026:
 
@@ -77,10 +78,11 @@ Verified on **28 October 2026**:
 | Install | `npm install` | 157 packages, 0 vulnerabilities |
 | Local database | `npm run dev:db` | Local `mongod` on `127.0.0.1:27017`, data in `server/.mongo-dev/` (ADR-035). Verified 22 November 2026 |
 | Development | `npm run dev` (client, `:5173`) · `npm run dev:server` (API) | API connects to `127.0.0.1` / `chosen_school_dev`, no remote connections. Verified 22 November 2026 |
-| Tests | `npm test` | 352 tests in 35 files — 227 pass, 125 skipped (database integration, opt-in). Re-run 22 November 2026 |
-| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | 310 pass in 28 files — re-run 22 November 2026. mongodb-memory-server downloads the pinned 6.0.14 (~510 MB) on first run, to `~/.cache/mongodb-binaries` |
+| Tests | `npm test` | 378 tests in 37 files — 253 pass, 125 skipped (database integration, opt-in). Re-run 22 November 2026 |
+| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | 336 pass in 30 files — re-run 22 November 2026. mongodb-memory-server downloads the pinned 6.0.14 (~510 MB) on first run, to `~/.cache/mongodb-binaries` |
 | Admin account | `ADMIN_EMAIL=... npm run provision-admin:dev` (local) · `provision-admin` (production `.env`) | Creates or rotates the single admin; deletes all sessions on rotation. Piped input: the **whole** of stdin is the password |
 | Seed | `npm run seed:dev` (local) · `seed` (production `.env`, refuses) | 20 synthetic applications |
+| Storage check | `npm run verify-storage` | Live V-03 / V-04 against the buckets in `server/.env`; uploads, reads and deletes a 1×1 synthetic image. **Passed 22 November 2026** |
 | Indexes | `npm run sync-indexes:dev` (local) · `sync-indexes` (production `.env`) | Creates declared indexes; `autoIndex` is off by design. Run once on a fresh local database |
 | Lint | `npm run lint` | 0 problems |
 | Type check | `npm run typecheck` | Both workspaces clean |

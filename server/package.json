@@ -15,6 +15,7 @@
     "sync-indexes:dev": "tsx --env-file=.env --env-file=.env.development src/scripts/sync-indexes.ts",
     "provision-admin": "tsx --env-file=.env src/scripts/provision-admin.ts",
     "provision-admin:dev": "tsx --env-file=.env --env-file=.env.development src/scripts/provision-admin.ts",
+    "verify-storage": "tsx --env-file=.env src/scripts/verify-storage.ts",
     "test": "vitest run"
   },
   "dependencies": {

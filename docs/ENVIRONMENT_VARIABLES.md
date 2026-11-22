@@ -43,8 +43,9 @@ Consumed by the Express API at runtime.
 | `SESSION_COOKIE_NAME` | Cookie name | No | No (default `__Host-cs_session`) | — | Must start `__Host-` in production |
 | `TRUST_PROXY_HOPS` | How many proxies to trust for client IP | No | Yes | Determined by deployment | Integer 0–5. **Must be verified, not guessed** — see §6 |
 | `LOG_LEVEL` | Logging verbosity | No | No (default `info`) | — | One of `error`, `warn`, `info`, `debug` |
-| `SUPABASE_URL` | Supabase project URL | No (identifier) | Yes | Supabase dashboard → Project Settings → API | Absolute `https://` URL, no trailing slash, form `https://<ref>.supabase.co` |
-| `SUPABASE_SERVICE_ROLE_KEY` | Storage access key | **Yes** | Yes | Supabase → Project Settings → API → `service_role` | Non-empty. **Bypasses row-level security entirely** — see §9 |
+| `STORAGE_DRIVER` | Which storage driver | No | No (default `supabase` in production, `local` otherwise) | Chosen by us | `local` or `supabase`. **`local` is refused in production**: Render's disk is wiped on every deploy (S13) |
+| `SUPABASE_URL` | Supabase project URL | No (identifier) | When `STORAGE_DRIVER=supabase` | Supabase dashboard → Project Settings → Data API → Project URL | Exactly `https://<ref>.supabase.co`: no path, no trailing slash. **Not the `/rest/v1` address**, which is the database API; boot names this mistake |
+| `SUPABASE_SERVICE_ROLE_KEY` | Storage access key | **Yes** | When `STORAGE_DRIVER=supabase` | Supabase → Project Settings → API Keys → **Secret keys** (`sb_secret_…`), or the legacy `service_role` key | Boot refuses the publishable key (`sb_publishable_…`) and a legacy `anon` key: both are public by design and cannot read a private bucket. **Bypasses row-level security entirely** — see §9 |
 | `SUPABASE_BUCKET_PRIVATE` | Private admission-file bucket | No | Yes | Chosen at setup | `admissions-private` |
 | `SUPABASE_BUCKET_PUBLIC` | Public gallery bucket | No | Yes | Chosen at setup | `gallery-public` |
 
@@ -102,7 +103,9 @@ separate backup project preserves the separation. This is **D-12**, still awaiti
 | `TRUST_PROXY_HOPS` | `0` | `2` (verify) | `2` (verify) |
 | `VITE_API_BASE_URL` | `/api/v1` (Vite dev proxy) | `/api/v1` | `/api/v1` |
 | `ALLOW_REMOTE_DEV_DB` | unset (`false`). Set `true` only to develop against a second, non-production Atlas cluster | `false` | not used |
-| Supabase variables | Local storage stub, or a dev bucket in a spare project | — | Application project |
+| `STORAGE_DRIVER` | `local` (set in `.env.development`; photos go to `server/.storage`) | — | `supabase` |
+| `ALLOW_REMOTE_DEV_STORAGE` | unset (`false`). Set `true` only to develop against a separate, non-production Supabase project | `false` | not used |
+| Supabase variables | Not used while `STORAGE_DRIVER=local` | — | Application project |
 
 ### 5.1 Which file, and when
 
@@ -233,9 +236,17 @@ in a degraded state.
 
 **Validation is staged by slice.** The server validates only the variables it currently uses. As of
 S01 that is `NODE_ENV`, `PORT`, `MONGODB_URI`, `MONGODB_DB_NAME`, `APP_ORIGIN`,
-`SESSION_COOKIE_NAME`, `TRUST_PROXY_HOPS` and `LOG_LEVEL`. The Supabase variables become required at
-S13, when storage is wired in — requiring them earlier would force credentials before anything
-reads them.
+`SESSION_COOKIE_NAME`, `TRUST_PROXY_HOPS` and `LOG_LEVEL`.
+
+**Since S13 (22 November 2026)** boot also validates storage (`server/src/lib/storage/config.ts`).
+With `STORAGE_DRIVER=supabase` (the production default) it requires `SUPABASE_URL` in its exact
+project-URL form, a **secret** key, and two different bucket names. It names each mistake and the
+fix, never the value. `local` is refused in production. `supabase` is refused in development unless
+`ALLOW_REMOTE_DEV_STORAGE=true` (ADR-035). The database-only scripts (`seed`, `sync-indexes`,
+`provision-admin`) skip the storage checks, because they never touch storage.
+
+**`npm run verify-storage`** runs the live checks (INTEGRATIONS V-03, V-04) against the buckets in
+`server/.env`. It uploads, reads and deletes a 1×1 synthetic image, and prints HTTP statuses only.
 
 **A missing database does not stop the process.** Bad configuration exits; an unreachable database
 is logged and the process keeps serving, so `/health` can report `503` honestly. Reconnection after

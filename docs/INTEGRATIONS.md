@@ -38,7 +38,7 @@ connects with it and succeeds.
 | I-02 | MongoDB Atlas | Primary database | Required | **Configured** — not verified |
 | I-03 | Vercel | Frontend hosting | Required | Awaiting my action |
 | I-04 | Render | API hosting | Required | Awaiting my action |
-| I-05 | Supabase Storage | Private admission files and public gallery images | Required | **Configured** — not verified |
+| I-05 | Supabase Storage | Private admission files and public gallery images | Required | **Verified** (22 Nov 2026) — V-03 and V-04 passed; bucket size/type limits not yet set |
 | I-06 | Supabase Storage (backup project) | Off-site encrypted backups | Required | Awaiting my action — **D-12** |
 | I-07 | Local backup toolchain | `mongodump` + `age` + upload script | Required | Planned |
 | I-08 | Uptime monitoring | Availability alerting | Required for Stage 1 launch | Deferred |
@@ -170,7 +170,7 @@ connects with it and succeeds.
 | **Provider** | Supabase Storage — **file storage only**, not Supabase Database |
 | **Purpose** | Private admission photographs and approved private admission files; public gallery images |
 | **Affected features** | FR-007–FR-013 (upload), FR-019–FR-022 (admin viewing), FR-030 (gallery) |
-| **Status** | **Configured** (21 November 2026) — selected (ADR-032). `server/.env` holds `SUPABASE_URL`, a service-role key and the bucket names `admissions-private` / `gallery-public`. Whether the buckets exist with the right public/private setting and limits is unproven: V-03 and V-04 not run. This is what S13 needs to start |
+| **Status** | **Verified** 22 November 2026. The first check that day failed: the URL was the `/rest/v1` address and the key was the publishable key. The owner corrected both. `npm run verify-storage` then passed V-03 and V-04 (see §7), and a synthetic photograph went through the app end to end on the private bucket: upload, admin stream, PDF, permanent delete, bucket empty afterwards. **Outstanding owner action:** neither bucket has a file-size or file-type limit. Suggested: `admissions-private` 5 MB, `image/webp` only (the server always stores WebP); `gallery-public` 5 MB, `image/webp, image/jpeg, image/png`. The server already enforces its own limits, so this is a second line of defence, not a gap in the first |
 | **Connection method** | `@supabase/supabase-js` from the Express server, `storage.from(bucket)` |
 | **Documentation** | https://supabase.com/docs/guides/storage |
 | **Prerequisites** | Supabase account and one project. Two buckets |
@@ -348,15 +348,15 @@ to paste secrets into this conversation.
 
 ## 7. Verification log
 
-None of V-01 to V-09 has been run. GitHub (I-01) was verified separately on 21 November 2026 — see
+V-03 and V-04 were run on 22 November 2026; the rest have not been. GitHub (I-01) was verified separately on 21 November 2026 — see
 its entry in §3. This table is filled in as each check is actually run.
 
 | # | Check | Command / method | Expected | Actual | Date |
 |---|---|---|---|---|---|
 | V-01 | Atlas connection | scratch write/read/delete script | Document round-trips | **Not run** — credentials now present in `server/.env` (21 Nov 2026) | — |
 | V-02 | Atlas rejects bad credentials | connect with wrong password | Auth error, no data leak | **Not run** | — |
-| V-03 | Private bucket is not public | unauthenticated `GET` on the public-path form of a private object | `400`/`403`/`404` — never the file | **Not run** | — |
-| V-04 | Public bucket serves gallery images | unauthenticated `GET` on a public object URL | `200` with the image | **Not run** | — |
+| V-03 | Private bucket is not public | unauthenticated `GET` on the public-path form of a private object | `400`/`403`/`404` — never the file | **Pass.** Public-path `GET` of a private object without a key: `400`. Authenticated-path `GET` without a key: `400`. With the secret key, the bytes read back match. Bucket `public` flag: `false` | 2026-11-22 |
+| V-04 | Public bucket serves gallery images | unauthenticated `GET` on a public object URL | `200` with the image | **Pass.** Unauthenticated `GET` on the public URL: `200`, bytes match. Bucket `public` flag: `true`. Test objects deleted afterwards | 2026-11-22 |
 | V-05 | Render health endpoint | `GET /api/v1/health` | `200`, no internal detail | **Not run** | — |
 | V-06 | Cold start through Vercel proxy | idle 20 min, then request | Success, or honest failure; latency recorded | **Not run** | — |
 | V-07 | Cookie is first-party on Vercel origin | DevTools → Cookies | Attributed to Vercel origin, `__Host-` accepted | **Not run** | — |

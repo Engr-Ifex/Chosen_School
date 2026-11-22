@@ -9,6 +9,14 @@ const valid: NodeJS.ProcessEnv = {
   APP_ORIGIN: 'http://localhost:5173',
 };
 
+/** Valid Supabase settings: production requires them since S13. Placeholder key, not real. */
+const productionStorage: NodeJS.ProcessEnv = {
+  SUPABASE_URL: 'https://exampleref.supabase.co',
+  SUPABASE_SERVICE_ROLE_KEY: 'sb_secret_TEST_PLACEHOLDER_NOT_REAL',
+  SUPABASE_BUCKET_PRIVATE: 'admissions-private',
+  SUPABASE_BUCKET_PUBLIC: 'gallery-public',
+};
+
 function captureIssues(env: NodeJS.ProcessEnv): ConfigError {
   try {
     loadConfig(env);
@@ -87,12 +95,14 @@ describe('loadConfig', () => {
   it('accepts a production configuration that satisfies the cookie rule', () => {
     const config = loadConfig({
       ...valid,
+      ...productionStorage,
       NODE_ENV: 'production',
       APP_ORIGIN: 'https://school.example',
     });
 
     expect(config.nodeEnv).toBe('production');
     expect(config.sessionCookieName).toBe('__Host-cs_session');
+    expect(config.storage.driver).toBe('supabase');
   });
 });
 
@@ -137,6 +147,7 @@ describe('development database guard (ADR-035)', () => {
     expect(() =>
       loadConfig({
         ...valid,
+        ...productionStorage,
         NODE_ENV: 'production',
         MONGODB_URI: atlas,
         APP_ORIGIN: 'https://school.example',

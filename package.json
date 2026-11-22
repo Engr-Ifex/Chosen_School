@@ -17,6 +17,7 @@
     "seed:dev": "npm run seed:dev --workspace server",
     "sync-indexes:dev": "npm run sync-indexes:dev --workspace server",
     "provision-admin:dev": "npm run provision-admin:dev --workspace server",
+    "verify-storage": "npm run verify-storage --workspace server",
     "build": "npm run build --workspace client && npm run build --workspace server",
     "lint": "eslint .",
     "typecheck": "npm run typecheck --workspaces --if-present",

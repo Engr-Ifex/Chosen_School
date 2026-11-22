@@ -70,8 +70,8 @@ Every slice states the same eleven things:
 | S19 | School information content | S18 | No |
 | S20 | Accessibility, responsive, Stage 1 gate | S14, **S15**, S16–S19 | Yes |
 
-**Progress (22 Nov 2026):** S00–S06 and S08–S12 complete. **S07 blocked** on Vercel and Render
-accounts. Next: S13 (needs the Supabase project), or S16 if that is not ready.
+**Progress (22 Nov 2026):** S00–S06 and S08–S13 complete. **S07 blocked** on Vercel and Render
+accounts. Next: S16 (announcements and events). S14 needs Vercel and Render; S15 needs D-12 and a backup project.
 
 ---
 
@@ -636,6 +636,7 @@ traceability row in TEST_PLAN now points at the new IDs.
 They belong with the dashboard, which does not exist yet.
 
 ### S13 — Swap storage to Supabase Storage — ⚠ needs a Supabase project
+**Status:** Complete — 22 November 2026
 **Outcome** — Files live in Supabase Storage; the local driver remains for tests.
 **Covers** — FR-012, FR-030.
 **Depends on** — S08, a Supabase project (I-05), and **D-13** if gallery publication is to keep its approved control.
@@ -648,6 +649,63 @@ They belong with the dashboard, which does not exist yet.
 **Verify** — V-03, V-04, F-10 to F-14 against real buckets.
 **Risks / rollback** — A private bucket configured public exposes children's photographs. Verify before any real upload.
 **DoD** — V-03 and V-04 recorded with actual responses.
+
+**Build notes (22 Nov 2026).**
+
+*Built:*
+- `lib/storage/supabase.ts`, the same interface as the local driver. Uploads, downloads through the
+  **authenticated** endpoint only, and deletes. There is no public or signed URL anywhere.
+- `lib/storage/config.ts`: `STORAGE_DRIVER=local|supabase`, chosen at boot by `configureStorage()`.
+  No caller changed.
+- Boot checks that name the mistake and the fix:
+  - `local` is refused in production (Render's disk is wiped on deploy).
+  - `SUPABASE_URL` must be the bare project URL.
+  - The key must be a secret key. The publishable key or a legacy `anon` key is refused.
+  - The two bucket names must differ.
+  - `supabase` is refused in development unless `ALLOW_REMOTE_DEV_STORAGE=true` (ADR-035).
+- `npm run verify-storage` performs V-03 and V-04 against the real buckets, and cleans up after itself.
+- Tests (no network): driver request shape, `404` and `400 not_found` treated as missing, no key in
+  any error message, unsafe keys refused before any request, and every config case.
+
+*Deviation from this slice's text:* the driver uses Node's built-in `fetch`, not
+`@supabase/supabase-js`. It makes three REST calls. The client library would add auth, realtime
+and database packages that ADR-032 does not adopt, and AGENTS.md §6 forbids a dependency the
+existing stack can replace. No new dependency was added.
+
+*Was blocked, now resolved:* the first read-only check of `server/.env` found `SUPABASE_URL` set to
+the `/rest/v1` database address, and `SUPABASE_SERVICE_ROLE_KEY` holding the **publishable** key.
+With that key, Supabase showed no buckets at all. The owner corrected both the same day.
+
+**DoD performed, 22 Nov 2026 — `npm run verify-storage` against the real buckets:**
+
+| Check | Expected | Actual |
+|---|---|---|
+| `admissions-private` is private | `public: false` | `false` ✔ |
+| `gallery-public` is public | `public: true` | `true` ✔ |
+| V-03: private object via public URL, no key | never the file | `400` ✔ |
+| V-03: private object via authenticated URL, no key | refused | `400` ✔ |
+| V-03: private object with the secret key | bytes match | match ✔ |
+| V-04: public object via public URL, no key | `200` + image | `200`, bytes match ✔ |
+| Test objects deleted | gone | gone ✔ |
+
+**End to end through the app on the private bucket.** This used the local database and Supabase
+storage, with development's opt-in `ALLOW_REMOTE_DEV_STORAGE=true` for that one run, and a
+synthetic 600×800 image:
+- The submission with the photo returned `201`, stored as WebP 600×800.
+- The admin photo stream returned `200`, `image/webp`, `Cache-Control: private, no-store`,
+  `nosniff`.
+- The same request without a session returned `401` (F-10).
+- The single PDF returned `200` with 1 embedded image.
+- Trash `200`, then permanent delete `204` (F-14).
+- Afterwards, the record returned `404`, and listing the private bucket (root, `applications/`,
+  `verification/`) showed **no objects**.
+
+**Owner action, not blocking:** neither bucket has a file-size or file-type limit set. The server
+enforces its own (5 MB, magic-byte check, WebP re-encode), so this would be a second line of
+defence. Suggested values are in INTEGRATIONS I-05.
+
+*Still open, not blocking S13:* **D-13** (gallery publication control) matters at S17, when the
+public bucket is first written to.
 
 ### S14 — Production deployment — ⚠ needs all accounts
 **Outcome** — The real system runs on Vercel, Render and Atlas.

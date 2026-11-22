@@ -11,6 +11,7 @@ import { createApp } from './app.js';
 import { ConfigError, describePresence, loadConfig, mongoHost, type Config } from './config.js';
 import { connectDatabase, disconnectDatabase } from './db.js';
 import { createLogger } from './logger.js';
+import { configureStorage, storageDriverName } from './lib/storage/index.js';
 
 const CONFIG_KEYS = [
   'NODE_ENV',
@@ -22,6 +23,12 @@ const CONFIG_KEYS = [
   'TRUST_PROXY_HOPS',
   'LOG_LEVEL',
   'ALLOW_REMOTE_DEV_DB',
+  'STORAGE_DRIVER',
+  'SUPABASE_URL',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'SUPABASE_BUCKET_PRIVATE',
+  'SUPABASE_BUCKET_PUBLIC',
+  'ALLOW_REMOTE_DEV_STORAGE',
 ];
 
 function readConfigOrExit(): Config {
@@ -45,6 +52,14 @@ async function main(): Promise<void> {
   logger.info('boot', {
     nodeEnv: config.nodeEnv,
     ...describePresence(process.env, CONFIG_KEYS),
+  });
+
+  // Before the app exists, so no request can reach the default local driver.
+  configureStorage(config.storage);
+  logger.info('storage_configured', {
+    driver: storageDriverName(),
+    // Bucket names are not secret; the key is never logged.
+    bucket: config.storage.driver === 'supabase' ? config.storage.privateBucket : null,
   });
 
   // Bad configuration stops the process. An unreachable database does not:

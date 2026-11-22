@@ -5,12 +5,13 @@
  * A server that starts with a broken configuration fails later, in front of a
  * parent, with a stack trace instead of a message.
  *
- * Scope note: S01 validates only what S01 uses. The Supabase variables become
- * required at S13, when storage is wired in — requiring them now would force
- * credentials before anything reads them.
+ * Storage settings are validated in `lib/storage/config.ts` and folded in here,
+ * so a wrong Supabase URL or key stops the server at boot rather than failing
+ * on the first upload (S13).
  */
 
 import { z } from 'zod';
+import { loadStorageConfig, type StorageConfig } from './lib/storage/config.js';
 
 export interface Config {
   nodeEnv: 'development' | 'test' | 'production';
@@ -21,6 +22,17 @@ export interface Config {
   sessionCookieName: string;
   trustProxyHops: number;
   logLevel: 'error' | 'warn' | 'info' | 'debug';
+  /** Which storage driver, and its settings (S13). Never logged. */
+  storage: StorageConfig;
+}
+
+export interface LoadConfigOptions {
+  /**
+   * Validate storage settings too. The database-only scripts (seed,
+   * sync-indexes, provision-admin) pass `false`: they never touch storage, and
+   * a storage mistake should not stop an administrator being provisioned.
+   */
+  storage?: boolean;
 }
 
 export interface ConfigIssue {
@@ -104,7 +116,10 @@ const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
  * Parses and validates configuration from an environment-like object.
  * Throws ConfigError listing every problem, rather than only the first.
  */
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+export function loadConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  options: LoadConfigOptions = {},
+): Config {
   const parsed = schema.safeParse(env);
 
   if (!parsed.success) {
@@ -145,6 +160,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     }
   }
 
+  const storage =
+    options.storage === false
+      ? { config: { driver: 'local' } as StorageConfig, issues: [] }
+      : loadStorageConfig(env, value.NODE_ENV);
+  issues.push(...storage.issues);
+
   if (issues.length > 0) throw new ConfigError(issues);
 
   return {
@@ -156,6 +177,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     sessionCookieName: value.SESSION_COOKIE_NAME,
     trustProxyHops: value.TRUST_PROXY_HOPS,
     logLevel: value.LOG_LEVEL,
+    storage: storage.config,
   };
 }
 
