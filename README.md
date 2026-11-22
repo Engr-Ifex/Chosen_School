@@ -6,7 +6,7 @@ Public website and private administrator dashboard for Chosen School (Primary an
 admission form, and the administrator can sign in, review, edit, trash, restore and permanently
 delete applications, and export them as PDFs. Visitors can send an enquiry or request a visit, and
 the administrator works through both inboxes. ROADMAP slices S00–S06 and S08–S13 are complete; photographs are stored in Supabase in production.
-Nothing is deployed. The current position is in `docs/ROADMAP.md` §3.
+Deployed to Vercel and Render; **there are no backups** (ADR-036). The current position is in `docs/ROADMAP.md` §3.
 
 ## Structure
 

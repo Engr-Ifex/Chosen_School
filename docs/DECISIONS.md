@@ -49,6 +49,7 @@
 | ADR-032 | Supabase Storage replaces Cloudflare R2 | Accepted |
 | ADR-034 | Photographs included in bulk PDF export | Accepted |
 | ADR-035 | Local development uses its own database, never Atlas | Accepted |
+| ADR-036 | Go live without backups; S15 deferred (risk accepted) | Accepted |
 
 ---
 
@@ -720,5 +721,35 @@ driver until S13, and S13 must keep development on the local driver or on a sepa
 **Rejected:** a second database name on the same Atlas cluster. It still puts production
 credentials on every development run, and one typo in the database name reaches production. A
 second M0 cluster stays possible through `ALLOW_REMOTE_DEV_DB`, but is not the default.
+
+---
+
+### ADR-036 — Go live without backups; S15 deferred (risk accepted)
+**Status:** Accepted · **Date:** 2026-11-22 · **Owner decision, risk knowingly accepted** · **Affects:** ROADMAP S15, S20, gate G3; SECURITY §17; D-12
+
+**Context.** The roadmap required a tested, off-site backup (S15) before real admission data (gate
+G3) and before Stage 1 (S20). On 22 November 2026, with the site already deployed to Vercel and
+Render, the owner decided not to build backups for now and to accept real applications anyway.
+The choice was put as "test data only until backups exist" or "go live without backups". The owner
+chose the second.
+
+**Decision.** S15 is deferred indefinitely. Gate G3 is **waived by the owner**, not met. D-12 (the
+backup project) stays open until S15 resumes.
+
+**Consequences, stated plainly so they are not forgotten:**
+- **A lost record cannot be recovered.** Atlas M0 keeps no backups, and neither does the free
+  Supabase plan (ADR-032). An accidental permanent delete, a bad migration, a compromised admin
+  session, or Atlas or Supabase losing the data means that child's application and photograph are
+  gone.
+- **Permanent delete now means permanently gone** in the strongest sense. The two-step confirmation
+  (S09) is the only safeguard left.
+- AGENTS.md §8 requires "a fresh backup taken first" before any structural migration. **With no
+  backups, no structural migration may run** until S15 is done or the owner approves an
+  exception for that specific migration.
+- The Stage 1 checklist (S20, SECURITY §17) cannot be fully met. Any claim of Stage 1 readiness
+  must state this waiver.
+
+**Revisit when:** the volume of real applications makes a loss unacceptable, before the first
+structural migration, or before Stage 2 (SG-02).
 
 ---

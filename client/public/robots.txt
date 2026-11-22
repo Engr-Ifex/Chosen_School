@@ -1,0 +1,6 @@
+# Chosen School — TEST_PLAN DEP-08.
+# The dashboard and the API are private: never index them. Public pages may be
+# crawled. No personal data lives at any crawlable path.
+User-agent: *
+Disallow: /admin
+Disallow: /api/

@@ -20,7 +20,9 @@ What exists, checked by inspection on 22 November 2026:
 - **Not yet built:** the dashboard, announcements and events, gallery, FAQs,
   testimonials, settings and school content screens (S16–S19). Storage: production uses Supabase
   (S13, verified against the real buckets 22 November 2026); development uses the local driver.
-  Nothing is deployed.
+  **Deployed** (22 November 2026): Vercel `chosenschool.vercel.app`, Render `chosen-school.onrender.com`,
+  running S12. S14 checks are partly done; per-IP rate limits do not yet work in production (T3).
+  **No backups exist** (ADR-036): nothing deleted can be recovered, and no structural migration may run.
 
 Toolchain, verified by inspection on 28 October 2026:
 

@@ -71,7 +71,7 @@ Every slice states the same eleven things:
 | S20 | Accessibility, responsive, Stage 1 gate | S14, **S15**, S16–S19 | Yes |
 
 **Progress (22 Nov 2026):** S00–S06 and S08–S13 complete. **S07 blocked** on Vercel and Render
-accounts. Next: S16 (announcements and events). S14 needs Vercel and Render; S15 needs D-12 and a backup project.
+accounts (now deployed; its checks are folded into S14). **S14 in progress**: deployed, T3 failed, owner actions listed under S14. **S15 deferred** (ADR-036). Next build slice: S16.
 
 ---
 
@@ -708,6 +708,7 @@ defence. Suggested values are in INTEGRATIONS I-05.
 public bucket is first written to.
 
 ### S14 — Production deployment — ⚠ needs all accounts
+**Status:** In progress — deployed by the owner; checks partly done (22 November 2026). See the progress note below.
 **Outcome** — The real system runs on Vercel, Render and Atlas.
 **Covers** — FR-039 to FR-042.
 **Depends on** — S05, S07, S13; all accounts; SG-01 answered.
@@ -721,7 +722,46 @@ public bucket is first written to.
 **Risks / rollback** — A failed deploy leaves the previous one live. Never deploy with real data before S15.
 **DoD** — T1 to T5 recorded as passed on the real domains.
 
+**Progress note (22 Nov 2026).** The owner deployed `client/` to Vercel (`chosenschool.vercel.app`)
+and `server/` to Render (`chosen-school.onrender.com`). Both were serving commit `de08c66` (S12);
+the client bundle hash matched a local build. Checked from outside, with no account access:
+
+| Check | Result |
+|---|---|
+| Render `/api/v1/health` | `200 {"status":"ok"}` — Atlas reachable. HSTS, `nosniff`, `Referrer-Policy`, `X-Frame-Options` present; no `X-Powered-By` |
+| Vercel `/api/v1/health` (rewrite) | `200`, served by Render through the rewrite |
+| **T4** — no CORS needed | **Pass.** No `Access-Control-Allow-Origin` anywhere; the app works same-origin |
+| DEP-04 — errors | **Pass.** Unknown route returns the `NOT_FOUND` envelope with a request id; no stack, no path |
+| DEP-07 — HTTPS | **Pass.** Vercel `308` and Render `301` to https |
+| DEP-09 — health leaks nothing | **Pass** |
+| Admin routes without a session | `401` (applications, enquiries) |
+| SPA deep links (`/contact`, `/admin/login`, …) | `200` |
+| **DEP-06** — headers on the site | **Failed, fixed in code:** Vercel sent only HSTS. `client/vercel.json` now sends a CSP plus `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`. `vite preview` applies the same headers, and under them the built site was walked locally: home, admissions (class list), contact submit, sign-in, list, bulk PDF, inboxes. **No CSP violations** |
+| **DEP-08** — `robots.txt` | **Failed, fixed in code:** it returned the app's HTML. `client/public/robots.txt` now disallows `/admin` and `/api/` |
+| **T3** — client IP behind the proxy | **Failed.** Six failed sign-ins through Vercel were counted against **six different Cloudflare addresses** (162.158.x, 104.22.x, 172.71.x), so the per-IP limit never triggered. A direct request to Render also resolved to Cloudflare. Forged `X-Forwarded-For` values were ignored (not spoofable at this depth). Cause: Render sits behind Cloudflare, so `TRUST_PROXY_HOPS=2` stops one hop short. **Effect: per-IP rate limits on login and on the public forms do not work in production.** Parents are not blocked by each other; rather, nobody is throttled |
+| T1 — cookie in Safari / iOS | Not run: needs the owner's real sign-in |
+| T2 — cold start | Not measured: needs 20 minutes idle. Warm responses took 2.5–3.8 s |
+| T5 — Atlas behaviour | Connection works (health `ok`); the wrong-password and outage cases were not run |
+| DEP-10 — uptime monitor | Not configured (I-08 is deferred) |
+
+**Owner actions to finish S14:**
+1. **Before pushing S13**, set on Render: `STORAGE_DRIVER=supabase`, `SUPABASE_URL`,
+   `SUPABASE_SERVICE_ROLE_KEY` (the secret key), `SUPABASE_BUCKET_PRIVATE`,
+   `SUPABASE_BUCKET_PUBLIC`. S13's boot check refuses to start without them, by design. **Until S13
+   is live, production writes admission photos to Render's disk, which is wiped on every deploy and
+   restart.**
+2. Set `TRUST_PROXY_HOPS=3` on Render and redeploy, then T3 is re-run. If requests through Vercel
+   then show a Vercel/AWS address rather than the visitor's, the value becomes `4`. Either way,
+   requests sent straight to Render can still bypass the limit. A shared-secret check between
+   Vercel and Render would close that; it is recorded as a follow-up, not done.
+3. T1: sign in at `chosenschool.vercel.app` in desktop Safari and on an iPhone, and confirm the
+   steps in TEST_PLAN §7.
+
+**Found in passing:** the admin application detail page never displays the photograph. The API
+streams it (S08), but no UI shows it. To fix in a later slice.
+
 ### S15 — Backups and restore drill — ⚠ needs Atlas + a Supabase backup project
+**Status:** Deferred by the owner, 22 November 2026 (ADR-036). The site went live without backups, and the risk was accepted in writing.
 **Outcome** — A documented, encrypted, off-site backup that has actually been restored once.
 **Covers** — FR-039 to FR-041.
 **Depends on** — S14.
@@ -813,7 +853,7 @@ public bucket is first written to.
 |---|---|---|
 | **G1 — Core loop** | S06 complete and demonstrated | Any claim that the product works |
 | **G2 — Auth verified** | S07 passed | Stage 1 launch |
-| **G3 — Data safety** | S09, S15 complete | Real admission data |
+| **G3 — Data safety** | S09, S15 complete | Real admission data — **waived by the owner 22 Nov 2026 (ADR-036): live without backups** |
 | **G4 — Stage 1** | S20 and `TEST_PLAN.md` §13 | Showing the school |
 | **G5 — Stage 2** | SG-01 to SG-12 and S2-01 to S2-12 | Real applications |
 
