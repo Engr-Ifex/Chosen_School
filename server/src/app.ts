@@ -14,9 +14,11 @@ import { requireSession } from './middleware/auth.js';
 import { checkOriginAndCsrf } from './middleware/csrf.js';
 import { bySession, LIMITS, rateLimit } from './middleware/rate-limit.js';
 import { adminApplicationsRouter } from './routes/admin/applications.js';
+import { adminInboxRouter } from './routes/admin/inbox.js';
 import { authRouter } from './routes/auth.js';
 import { healthRouter, type HealthProbe } from './routes/health.js';
 import { publicApplicationsRouter } from './routes/public/applications.js';
+import { publicInboxRouter } from './routes/public/inbox.js';
 import { publicPlacementOptionsRouter } from './routes/public/placement-options.js';
 
 export interface AppOptions {
@@ -103,9 +105,11 @@ export function createApp(options: AppOptions): Express {
     // middleware ignores safe methods, so reads are unaffected.
     checkOriginAndCsrf({ appOrigin, requireToken: true }),
     adminApplicationsRouter(),
+    adminInboxRouter(),
   );
   app.use('/api/v1/public', publicPlacementOptionsRouter());
   app.use('/api/v1/public', publicApplicationsRouter({ appOrigin }));
+  app.use('/api/v1/public', publicInboxRouter({ appOrigin }));
 
   app.use(notFoundHandler);
   app.use(errorHandler(logger));

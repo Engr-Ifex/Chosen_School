@@ -18,3 +18,19 @@ export const SUBMISSION_SUCCESS_MESSAGE =
  */
 export const SUBMISSION_UNKNOWN_MESSAGE =
   "We couldn't confirm whether your application was received. Please check your connection and try again.";
+
+/**
+ * Contact enquiry confirmation (FR-023, DESIGN.md §5.3). States that the
+ * message was received and that follow-up is manual. It promises no response
+ * time and no automatic reply, because neither exists.
+ */
+export const ENQUIRY_SUCCESS_MESSAGE =
+  'Your enquiry has been received. The school will follow up with you directly.';
+
+/**
+ * Visit-request confirmation (FR-024, PRD §5.4, DESIGN.md §4.8). It must say
+ * the request was **received** and is **not yet a confirmed visit**. Booking
+ * language here would promise an appointment the school has not made.
+ */
+export const VISIT_REQUEST_SUCCESS_MESSAGE =
+  'Your visit request has been received. This is not yet a confirmed visit — the school will contact you to confirm a time or suggest another.';

@@ -70,8 +70,8 @@ Every slice states the same eleven things:
 | S19 | School information content | S18 | No |
 | S20 | Accessibility, responsive, Stage 1 gate | S14, **S15**, S16–S19 | Yes |
 
-**Progress (21 Nov 2026):** S00–S06 and S08–S11 complete. **S07 blocked** on Vercel and Render
-accounts. Next: S12.
+**Progress (22 Nov 2026):** S00–S06 and S08–S12 complete. **S07 blocked** on Vercel and Render
+accounts. Next: S13 (needs the Supabase project), or S16 if that is not ready.
 
 ---
 
@@ -589,6 +589,7 @@ embeds exactly two images, and that a single export embeds one. The bulk test fa
 previous route code.
 
 ### S12 — Enquiries and visit requests
+**Status:** Complete — 22 November 2026
 **Outcome** — Visitors can enquire and request a visit; the administrator manages both in separate inboxes.
 **Covers** — FR-023 to FR-025.
 **Depends on** — S06.
@@ -601,6 +602,38 @@ previous route code.
 **Verify** — API-P13, E2E-04, and the visit-request wording check.
 **Risks / rollback** — Copy implying confirmation. Assert the wording in a test.
 **DoD** — Submit a visit request and confirm the page says it was received, not booked.
+
+**Completion note (22 Nov 2026).** Two collections (`enquiries`, `visitrequests`) behind one
+shared inbox service, public `POST` routes, admin list/detail/status/archive routes, a Contact page
+with two separate forms, and two admin inboxes linked from the admin navigation.
+
+**The DoD was performed against the running app** (local database, ADR-035, synthetic records).
+An enquiry and a visit request were sent from `/contact`. Both returned `201`, and each form then
+showed its own confirmation. The visit confirmation reads: *"Your visit request has been received.
+This is not yet a confirmed visit — the school will contact you to confirm a time or suggest
+another."* In the dashboard, the enquiry was marked Reviewed and archived. It left the active
+inbox, appeared under Archived, and its status buttons were replaced by "Unarchive this record to
+change its status". The visit request showed "Sat, 28 Nov 2026 at 10:30" and the notice *"This is
+a request, not a booking."* At 375 px, the Contact page and both inboxes have no horizontal page
+scroll.
+
+**Verify:** API-P13 and the new API-P18–P20, API-A33–A38 (`schemas/inbox.test.ts`,
+`routes/inbox.test.ts`), and E2E-15 at component level (`pages/Contact.test.tsx`), which asserts the
+visit wording. The roadmap originally listed E2E-04 here; that ID is the admin edit flow, so the
+traceability row in TEST_PLAN now points at the new IDs.
+
+**Decisions made inside the spec, worth knowing:**
+- `PATCH` is strict (extra keys → `422`), and archived records cannot change status (`409`), the
+  same rule as trashed applications.
+- `visitrequests` gained `statusUpdatedAt`, to match `enquiries` (DATA_MODEL §6). It is not
+  personal data.
+- The Contact page shows **no school address or phone yet**. DESIGN §4.8 says to show only
+  school-approved details, and those arrive with the settings screen (S18).
+- Found during the check: the admin nav (now longer) pushed "Sign out" off-screen on a phone, and
+  `sr-only` table labels widened the page. Both were fixed.
+
+**Not done:** the dashboard counts for new enquiries and visits needing follow-up (API_SPEC §4.1).
+They belong with the dashboard, which does not exist yet.
 
 ### S13 — Swap storage to Supabase Storage — ⚠ needs a Supabase project
 **Outcome** — Files live in Supabase Storage; the local driver remains for tests.

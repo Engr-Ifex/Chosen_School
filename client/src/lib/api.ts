@@ -145,3 +145,67 @@ export async function fetchPlacementOptions(): Promise<PlacementOptions | null> 
     return null;
   }
 }
+
+export type FormResult =
+  | { ok: true; id: string }
+  | { ok: false; kind: 'validation'; message: string; fields: FieldErrors }
+  | { ok: false; kind: 'failure'; message: string }
+  | { ok: false; kind: 'unknown'; message: string };
+
+/**
+ * Submits one of the public contact forms (enquiry or visit request).
+ *
+ * Same three-way outcome as the admission form: success is claimed only on a
+ * `201` carrying an id, and a network failure is `unknown`, never success.
+ */
+async function submitForm(path: string, body: unknown, noun: string): Promise<FormResult> {
+  let response: Response;
+  try {
+    response = await request(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    return {
+      ok: false,
+      kind: 'unknown',
+      message: `We couldn't confirm whether your ${noun} was received. Please check your connection and try again.`,
+    };
+  }
+
+  if (response.status === 201) {
+    try {
+      const data = (await response.json()) as { id?: unknown };
+      if (typeof data?.id === 'string' && data.id.length > 0) return { ok: true, id: data.id };
+    } catch {
+      // Fall through: a 201 we cannot read is not proof of saving.
+    }
+    return {
+      ok: false,
+      kind: 'unknown',
+      message: `Your ${noun} may have been received, but we could not confirm it.`,
+    };
+  }
+
+  let envelope: ErrorEnvelope = {};
+  try {
+    envelope = (await response.json()) as ErrorEnvelope;
+  } catch {
+    // Non-JSON error body.
+  }
+
+  const message = envelope.error?.message ?? 'Something went wrong. Please try again.';
+  if (response.status === 422 && envelope.error?.fields) {
+    return { ok: false, kind: 'validation', message, fields: envelope.error.fields };
+  }
+  return { ok: false, kind: 'failure', message };
+}
+
+export function submitEnquiry(body: unknown): Promise<FormResult> {
+  return submitForm('/public/enquiries', body, 'enquiry');
+}
+
+export function submitVisitRequest(body: unknown): Promise<FormResult> {
+  return submitForm('/public/visit-requests', body, 'visit request');
+}

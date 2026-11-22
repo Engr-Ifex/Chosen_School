@@ -92,6 +92,9 @@ Each test runs against an in-memory MongoDB with the real Express app.
 | API-P15 | Two identical applications submitted | Both stored (duplicates are accepted by design) |
 | API-P16 | `GET /public/pages/about` | Returns the complete fixed key set in the defined order; an unsupplied section is present with an empty `body`, not omitted |
 | API-P17 | `GET /public/pages/nonsense` | `404` |
+| API-P18 | `POST /public/enquiries` supplying `status` or `archivedAt` | `201`; stored as `new`, not archived — the fields are ignored |
+| API-P19 | `POST /public/visit-requests` with a past `preferredDate`, an impossible date (`2099-02-30`) or a full timestamp | `422` on `preferredDate` |
+| API-P20 | Response body of a public enquiry or visit request | `{ id }` only — nothing echoed |
 
 ### 3.2 Admin endpoints
 
@@ -129,6 +132,12 @@ Each test runs against an in-memory MongoDB with the real Express app.
 | API-A30 | `PATCH /admin/pages/about` whose result would drop a required key | `422`; stored document unchanged |
 | API-A31 | `PATCH /admin/pages/about` with a `<script>` in the body | Tag stripped before storage; the saved body contains no script |
 | API-A32 | `PATCH /admin/pages/about` with no session | `401` |
+| API-A33 | Every `/admin/enquiries` and `/admin/visit-requests` route with no session | `401` |
+| API-A34 | Inbox list vs detail | List items carry no message body; the detail does |
+| API-A35 | `PATCH` with a field other than `status`, or `status: "confirmed"` | `422`; record unchanged |
+| API-A36 | `PATCH` status change | Persisted, `statusUpdatedAt` set, filterable by status; repeating the same status changes nothing |
+| API-A37 | Archive, then list, then unarchive | Leaves the active list, appears under `archived=true`, document still exists; archived records cannot change status or be archived twice (`409`) |
+| API-A38 | `DELETE /admin/enquiries/:id` | `404` — no delete route exists (Q11) |
 
 **Pass condition:** every row passes. Rows A01–A06, A16–A18 and A23 are release-blocking
 individually — each corresponds to a privacy or integrity failure, not a cosmetic one.
@@ -193,6 +202,7 @@ in-memory sort limit, which fails at runtime rather than at build time.
 | E2E-12 | Submit testimonial → approve → publish | Public only after both steps |
 | E2E-13 | Sign out, then press Back | Admin pages not reachable from cache |
 | E2E-14 | Mobile viewport, admin tables | Record-card layout usable; no horizontal clipping of controls |
+| E2E-15 | Visitor sends an enquiry and a visit request from Contact; admin reviews and archives | Each confirmation appears only after saving; the visit confirmation says **received, not yet confirmed**; status and archive persist |
 
 ---
 
@@ -402,7 +412,7 @@ that works is not the same as a system that is safe to use.
 | FR-007–FR-013 admissions | API-P07–P15, E2E-02/03, §5 |
 | FR-014–FR-016 authentication | API-A01–A05, T1, §5 |
 | FR-017–FR-022 application admin | API-A06–A18, DB-07–DB-10, S-01–S-06 |
-| FR-023–FR-025 enquiries and visits | API-P13, §3.2, E2E-04 |
+| FR-023–FR-025 enquiries and visits | API-P13, API-P18–P20, API-A33–A38, E2E-15 |
 | FR-026–FR-029 announcements and events | API-P03/P04, API-A19–A22, E2E-09/10 |
 | FR-030–FR-031 gallery | API-P05, API-A24, F-01–F-14, E2E-11 |
 | FR-032–FR-033 testimonials | API-P06/P12, API-A23, E2E-12 |

@@ -9,8 +9,9 @@ import { useAdminSession } from './SessionGate';
  * Admin shell.
  *
  * Deliberately minimal: only the sections that exist are linked. The full admin
- * navigation in DESIGN.md §3.3 lists Dashboard, Trash, Enquiries and more —
- * linking to pages that do not exist yet would produce dead ends.
+ * navigation in DESIGN.md §3.3 lists Dashboard, Announcements and more —
+ * linking to pages that do not exist yet would produce dead ends. The links
+ * wrap on a phone rather than pushing "Sign out" off the screen.
  */
 export function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = useAdminSession();
@@ -34,12 +35,24 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            <nav aria-label="Admin" className="flex items-center gap-2">
+            <nav aria-label="Admin" className="flex flex-wrap items-center gap-2">
               <Link
                 to="/admin/applications"
                 className="rounded-[var(--radius-control)] px-3 py-2 text-sm font-medium text-brand-dark hover:bg-brand-soft"
               >
                 Applications
+              </Link>
+              <Link
+                to="/admin/enquiries"
+                className="rounded-[var(--radius-control)] px-3 py-2 text-sm font-medium text-brand-dark hover:bg-brand-soft"
+              >
+                Enquiries
+              </Link>
+              <Link
+                to="/admin/visit-requests"
+                className="rounded-[var(--radius-control)] px-3 py-2 text-sm font-medium text-brand-dark hover:bg-brand-soft"
+              >
+                Visit requests
               </Link>
               <Link
                 to="/admin/trash"

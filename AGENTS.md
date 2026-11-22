@@ -6,17 +6,18 @@ Instructions for any AI agent working in this repository. Short by design — de
 
 ## 1. Repository state — read this first
 
-**The core admissions loop exists; the rest of the product does not.** ROADMAP slices S00–S06 and
-S08–S11 are complete. S07 is blocked on accounts.
+**Admissions, enquiries and visit requests exist; the rest of the product does not.** ROADMAP slices S00–S06 and
+S08–S12 are complete. S07 is blocked on accounts.
 
-What exists, checked by inspection on 21 November 2026:
+What exists, checked by inspection on 22 November 2026:
 
 - **Public:** the admission form (with optional photo), `POST /api/v1/public/applications`,
-  `GET /api/v1/public/placement-options`, `GET /api/v1/health`.
+  `GET /api/v1/public/placement-options`, `GET /api/v1/health`; the Contact page with the enquiry and
+  visit-request forms (`POST /api/v1/public/enquiries`, `/visit-requests`).
 - **Admin:** single-administrator sign-in with sessions and CSRF protection; the application list,
   detail, edit (with revision history), photo streaming, trash, restore, permanent delete, and
-  single and bulk PDF export.
-- **Not yet built:** enquiries and visits (S12), announcements and events, gallery, FAQs,
+  single and bulk PDF export; the enquiry and visit-request inboxes (status, archive).
+- **Not yet built:** the dashboard, announcements and events, gallery, FAQs,
   testimonials, settings and school content screens (S16–S19). Storage still uses the local
   driver; Supabase is S13. Nothing is deployed.
 
@@ -76,8 +77,8 @@ Verified on **28 October 2026**:
 | Install | `npm install` | 157 packages, 0 vulnerabilities |
 | Local database | `npm run dev:db` | Local `mongod` on `127.0.0.1:27017`, data in `server/.mongo-dev/` (ADR-035). Verified 22 November 2026 |
 | Development | `npm run dev` (client, `:5173`) · `npm run dev:server` (API) | API connects to `127.0.0.1` / `chosen_school_dev`, no remote connections. Verified 22 November 2026 |
-| Tests | `npm test` | 303 tests in 32 files — 193 pass, 110 skipped (database integration, opt-in). Re-run 22 November 2026 |
-| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | 267 pass in 26 files — re-run 22 November 2026. mongodb-memory-server downloads the pinned 6.0.14 (~510 MB) on first run, to `~/.cache/mongodb-binaries` |
+| Tests | `npm test` | 352 tests in 35 files — 227 pass, 125 skipped (database integration, opt-in). Re-run 22 November 2026 |
+| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | 310 pass in 28 files — re-run 22 November 2026. mongodb-memory-server downloads the pinned 6.0.14 (~510 MB) on first run, to `~/.cache/mongodb-binaries` |
 | Admin account | `ADMIN_EMAIL=... npm run provision-admin:dev` (local) · `provision-admin` (production `.env`) | Creates or rotates the single admin; deletes all sessions on rotation. Piped input: the **whole** of stdin is the password |
 | Seed | `npm run seed:dev` (local) · `seed` (production `.env`, refuses) | 20 synthetic applications |
 | Indexes | `npm run sync-indexes:dev` (local) · `sync-indexes` (production `.env`) | Creates declared indexes; `autoIndex` is off by design. Run once on a fresh local database |

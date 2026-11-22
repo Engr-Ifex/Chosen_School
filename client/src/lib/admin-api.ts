@@ -322,3 +322,114 @@ export function singlePdfPath(id: string): string {
 export function bulkPdfPath(ids: string[]): string {
   return `/admin/applications/pdf?ids=${ids.map(encodeURIComponent).join(',')}`;
 }
+
+// ---------------------------------------------------------------------------
+// Enquiry and visit-request inboxes — API_SPEC §4.4
+// ---------------------------------------------------------------------------
+
+export type InboxKind = 'enquiries' | 'visit-requests';
+export type InboxStatus = 'new' | 'reviewed' | 'responded';
+
+/** PRD wording for each status. There is no "confirmed": a visit request is not a booking. */
+export const INBOX_STATUS_LABELS: Record<InboxStatus, string> = {
+  new: 'New',
+  reviewed: 'Reviewed',
+  responded: 'Responded to',
+};
+
+export interface InboxListItem {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  section: string;
+  status: InboxStatus;
+  createdAt: string | null;
+  archivedAt: string | null;
+  /** Visit requests only. */
+  preferredDate?: string | null;
+  preferredTime?: string;
+}
+
+export interface InboxDetail extends InboxListItem {
+  message: string | null;
+  statusUpdatedAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface InboxListParams {
+  q?: string;
+  status?: InboxStatus | '';
+  archived?: boolean;
+  page?: number;
+  pageSize?: number;
+}
+
+async function readJson<T>(response: Response): Promise<ApiResult<T>> {
+  if (!response.ok) {
+    const error = await readError(response);
+    return { ok: false, status: response.status, message: error.message, fields: error.fields };
+  }
+  return { ok: true, data: (await response.json()) as T };
+}
+
+export async function fetchInbox(
+  kind: InboxKind,
+  params: InboxListParams,
+): Promise<ApiResult<{ data: InboxListItem[]; meta: ListMeta }>> {
+  const query = new URLSearchParams();
+  if (params.q) query.set('q', params.q);
+  if (params.status) query.set('status', params.status);
+  if (params.archived) query.set('archived', 'true');
+  if (params.page) query.set('page', String(params.page));
+  if (params.pageSize) query.set('pageSize', String(params.pageSize));
+
+  try {
+    return await readJson(await fetch(`${BASE}/admin/${kind}?${query.toString()}`));
+  } catch {
+    return { ok: false, status: 0, message: 'Could not reach the server.' };
+  }
+}
+
+export async function fetchInboxItem(kind: InboxKind, id: string): Promise<ApiResult<InboxDetail>> {
+  try {
+    return await readJson(await fetch(`${BASE}/admin/${kind}/${encodeURIComponent(id)}`));
+  } catch {
+    return { ok: false, status: 0, message: 'Could not reach the server.' };
+  }
+}
+
+async function inboxMutation(
+  kind: InboxKind,
+  id: string,
+  action: 'status' | 'archive' | 'unarchive',
+  csrfToken: string,
+  status?: InboxStatus,
+): Promise<ApiResult<InboxDetail>> {
+  const path = `${BASE}/admin/${kind}/${encodeURIComponent(id)}${action === 'status' ? '' : `/${action}`}`;
+  try {
+    const response = await fetch(path, {
+      method: action === 'status' ? 'PATCH' : 'POST',
+      headers: {
+        'X-CSRF-Token': csrfToken,
+        ...(action === 'status' ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: action === 'status' ? JSON.stringify({ status }) : undefined,
+    });
+    return await readJson(response);
+  } catch {
+    return { ok: false, status: 0, message: 'Could not reach the server.' };
+  }
+}
+
+export function setInboxStatus(kind: InboxKind, id: string, status: InboxStatus, csrfToken: string) {
+  return inboxMutation(kind, id, 'status', csrfToken, status);
+}
+
+export function archiveInboxItem(kind: InboxKind, id: string, csrfToken: string) {
+  return inboxMutation(kind, id, 'archive', csrfToken);
+}
+
+export function unarchiveInboxItem(kind: InboxKind, id: string, csrfToken: string) {
+  return inboxMutation(kind, id, 'unarchive', csrfToken);
+}

@@ -3,8 +3,11 @@ import { SiteLayout } from './components/site/SiteLayout';
 import { Container } from './components/ui/Container';
 import { SessionGate } from './components/admin/SessionGate';
 import Admissions from './pages/Admissions';
+import Contact from './pages/Contact';
 import AdminApplicationDetail from './pages/admin/AdminApplicationDetail';
 import AdminApplications from './pages/admin/AdminApplications';
+import AdminInbox from './pages/admin/AdminInbox';
+import AdminInboxDetail from './pages/admin/AdminInboxDetail';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminTrash from './pages/admin/AdminTrash';
 import DesignSystem from './pages/DesignSystem';
@@ -48,6 +51,7 @@ export default function App() {
         <Route element={<SiteLayout />}>
           <Route path="/" element={<Home />} />
           <Route path="/admissions" element={<Admissions />} />
+          <Route path="/contact" element={<Contact />} />
         </Route>
 
         {/* Admin: sign-in is public, everything else sits behind the gate. */}
@@ -56,6 +60,10 @@ export default function App() {
           <Route path="/admin/applications" element={<AdminApplications />} />
           <Route path="/admin/applications/:id" element={<AdminApplicationDetail />} />
           <Route path="/admin/trash" element={<AdminTrash />} />
+          <Route path="/admin/enquiries" element={<AdminInbox key="enquiries" kind="enquiries" />} />
+          <Route path="/admin/enquiries/:id" element={<AdminInboxDetail key="enquiries" kind="enquiries" />} />
+          <Route path="/admin/visit-requests" element={<AdminInbox key="visit-requests" kind="visit-requests" />} />
+          <Route path="/admin/visit-requests/:id" element={<AdminInboxDetail key="visit-requests" kind="visit-requests" />} />
         </Route>
 
         <Route element={<SiteLayout />}>

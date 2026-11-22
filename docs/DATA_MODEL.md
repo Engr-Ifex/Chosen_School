@@ -289,6 +289,11 @@ unreachable photograph with no way to find it.
 
 **Indexes:** `{ archivedAt: 1, createdAt: -1 }`, `{ status: 1, archivedAt: 1 }`.
 
+**Search (S12).** The admin search matches a case-insensitive name prefix, or an exact phone when
+the query has 7+ digits. Unlike applications, there is no derived `search` field, so the name match
+is not index-assisted. That is acceptable at the volume one school's inbox will see. Add a derived
+field if it ever becomes slow. Both inboxes use this rule.
+
 **Deletion:** archiving only. There is no Trash for enquiries — settled (Q11), not open. Trash,
 restore and permanent deletion apply to applications only. If the school later wants permanent
 deletion of enquiries, that is a scope addition requiring a new decision.
@@ -306,9 +311,13 @@ deletion of enquiries, that is a scope addition requiring a new decision.
 | `preferredDate` | Date | yes | Not in the past (server-checked against UTC date) |
 | `preferredTime` | String | yes | `HH:mm`, 24-hour. **Free-text times are rejected** |
 | `message` | String | no | ≤1000 chars |
-| `status` | String | yes | `new` \| `reviewed` \| `responded` |
+| `status` | String | yes | `new` \| `reviewed` \| `responded`, default `new` |
+| `statusUpdatedAt` | Date \| null | no | Added 22 November 2026 (S12) so both inboxes record when status last changed. Not personal data |
 | `archivedAt` | Date \| null | no | |
-| `createdAt` | Date | yes | |
+| `createdAt` / `updatedAt` | Date | yes | Mongoose `timestamps` |
+
+`preferredDate` is stored as **UTC midnight** of the requested day and is accepted only as
+`YYYY-MM-DD`: a full timestamp would carry a time zone and could move the day.
 
 **No confirmation field.** The PRD is explicit that a request is not a booking, and the only
 statuses are New/Reviewed/Responded to. Adding a "confirmed" state would be inventing a product
@@ -582,7 +591,7 @@ on the school's behalf.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `key` | String | yes | Namespaced, e.g. `login:ip:203.0.113.7`, `login:email:a@b.test`, `submit:application:ip:203.0.113.7`, `admin:session:<sessionId>`, `admin:pdf:session:<sessionId>`. Unique |
+| `key` | String | yes | Namespaced, e.g. `login:ip:203.0.113.7`, `login:email:a@b.test`, `submit:application:ip:203.0.113.7`, `submit:enquiry:ip:…`, `submit:visit:ip:…`, `admin:session:<sessionId>`, `admin:pdf:session:<sessionId>`. Unique |
 | `count` | Number | yes | Attempts inside the current window |
 | `windowStart` | Date | yes | Start of the fixed window. Compared on every read — never rely on TTL |
 | `expiresAt` | Date | yes | `windowStart + window`, for TTL housekeeping only |

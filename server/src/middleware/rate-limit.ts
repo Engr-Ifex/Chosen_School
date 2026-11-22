@@ -116,6 +116,8 @@ export async function resetLimit(key: string): Promise<void> {
  */
 export const LIMITS = {
   applicationSubmit: { windowMs: 60 * 60 * 1000, max: 5 },
+  enquirySubmit: { windowMs: 60 * 60 * 1000, max: 5 },
+  visitSubmit: { windowMs: 60 * 60 * 1000, max: 5 },
   adminPdf: { windowMs: 60 * 60 * 1000, max: 20 },
   adminRequests: { windowMs: 60 * 60 * 1000, max: 600 },
 } as const;

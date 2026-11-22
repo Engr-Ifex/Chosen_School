@@ -32,6 +32,12 @@ export function SiteHeader() {
               Home
             </Link>
             <Link
+              to="/contact"
+              className="rounded-[var(--radius-control)] px-3 py-2 text-sm font-medium text-brand-dark hover:bg-brand-soft"
+            >
+              Contact
+            </Link>
+            <Link
               to="/admissions"
               className="rounded-[var(--radius-control)] bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-hover"
             >

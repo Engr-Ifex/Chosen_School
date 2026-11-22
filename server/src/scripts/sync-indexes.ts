@@ -17,9 +17,11 @@ import { loadConfig } from '../config.js';
 import { Admin } from '../models/admin.js';
 import { AuditLog } from '../models/auditlog.js';
 import { Application } from '../models/application.js';
+import { Enquiry } from '../models/enquiry.js';
 import { RateLimit } from '../models/ratelimit.js';
 import { Session } from '../models/session.js';
 import { Settings } from '../models/settings.js';
+import { VisitRequest } from '../models/visitrequest.js';
 import { createLogger } from '../logger.js';
 
 const logger = createLogger('info');
@@ -31,6 +33,8 @@ const models = [
   ['auditlogs', AuditLog],
   ['ratelimits', RateLimit],
   ['settings', Settings],
+  ['enquiries', Enquiry],
+  ['visitrequests', VisitRequest],
 ] as const;
 
 async function main(): Promise<void> {

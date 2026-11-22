@@ -459,6 +459,19 @@ DATA_MODEL §6.
 Archive is not deletion, and there is no permanent-deletion path for enquiries or visit requests —
 settled as Q11. Trash, restore and permanent deletion apply to applications only (§4.3).
 
+**As built (S12, 22 November 2026):**
+- List query: `q` (name prefix, case-insensitive, or phone with 7+ digits), `status`,
+  `archived=true|false` (default `false`: the active inbox), `sort`, `page`, `pageSize` (≤100).
+  `sort` is whitelisted: `createdAt` for enquiries (default `-createdAt`); `createdAt` or
+  `preferredDate` for visit requests (default `preferredDate`, soonest first). Anything else is a
+  `VALIDATION_ERROR`.
+- List items carry no message body; the detail does. Every field is named, nothing is spread.
+- `PATCH` is **strict**: any key but `status` is a `VALIDATION_ERROR` naming the key, not silently
+  ignored. Setting the status a record already has changes nothing, including `statusUpdatedAt`.
+- An archived record cannot change status, and archiving twice or unarchiving an active record is
+  `409 CONFLICT`.
+- The public forms are origin-checked and limited to 5 per hour per IP, each with its own counter.
+
 ### 4.5 Announcements and events
 
 | Method | Path | Purpose |
