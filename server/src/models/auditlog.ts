@@ -15,6 +15,10 @@ export const AUDIT_ACTIONS = [
   'auth.logout',
   'auth.password.changed',
   'application.permanently_deleted',
+  // S16: publication is a separate, auditable action (ROADMAP S16 "Approach").
+  'announcement.published',
+  'announcement.unpublished',
+  'announcement.deleted',
   'gallery.image_unpublished',
   'settings.updated',
 ] as const;

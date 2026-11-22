@@ -494,6 +494,23 @@ This is what makes "no urgent-publication bypass" structural rather than a conve
 lists, links). Anything else is stripped, not escaped — escaped markup shows up as visible
 garbage in the admin UI.
 
+**As built (S16, 22 November 2026):**
+- **Sanitiser:** `sanitize-html` (`server/src/lib/sanitize.ts`). Allowed tags are `p br h2 h3 strong
+  em ul ol li a`. The only attribute is `href`, limited to http(s), mailto and tel; links get
+  `rel="noopener noreferrer"`. `script`/`style` are dropped with their content. A body with no
+  visible text is a `VALIDATION_ERROR`.
+- **Create and `PATCH` are strict:** `status` or `publishedAt` in either is a `VALIDATION_ERROR`
+  naming the key.
+- **Publish and unpublish:** publishing twice, or unpublishing a draft, is `409`. `publishedAt` is
+  kept from the first publish. Each action writes an audit entry.
+- **`DELETE`** is permanent (`204`) and audited.
+- **Admin responses** add `status`, `isExpired` (published but past expiry) and `isPublic`.
+- **Public responses** add `kind`, carry no `status`, and are sent with
+  `Cache-Control: public, max-age=60`.
+- **`expiresAt`** must be an ISO instant with an explicit offset. **Event dates** are `YYYY-MM-DD`.
+- **Categories** (§4.9): `GET` returns `{ data: [...] }` ordered by `order` then name. The slug is
+  generated from the name and unique within its scope; a duplicate is `409`.
+
 ### 4.6 Gallery
 
 | Method | Path | Purpose |

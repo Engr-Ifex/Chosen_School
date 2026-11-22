@@ -16,7 +16,9 @@ import { connectDatabase, disconnectDatabase } from '../db.js';
 import { loadConfig } from '../config.js';
 import { Admin } from '../models/admin.js';
 import { AuditLog } from '../models/auditlog.js';
+import { Announcement } from '../models/announcement.js';
 import { Application } from '../models/application.js';
+import { Category } from '../models/category.js';
 import { Enquiry } from '../models/enquiry.js';
 import { RateLimit } from '../models/ratelimit.js';
 import { Session } from '../models/session.js';
@@ -35,6 +37,8 @@ const models = [
   ['settings', Settings],
   ['enquiries', Enquiry],
   ['visitrequests', VisitRequest],
+  ['announcements', Announcement],
+  ['categories', Category],
 ] as const;
 
 async function main(): Promise<void> {

@@ -55,6 +55,12 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
                 Visit requests
               </Link>
               <Link
+                to="/admin/news"
+                className="rounded-[var(--radius-control)] px-3 py-2 text-sm font-medium text-brand-dark hover:bg-brand-soft"
+              >
+                News &amp; events
+              </Link>
+              <Link
                 to="/admin/trash"
                 className="rounded-[var(--radius-control)] px-3 py-2 text-sm font-medium text-brand-dark hover:bg-brand-soft"
               >

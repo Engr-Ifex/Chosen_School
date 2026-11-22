@@ -36,8 +36,8 @@ connects with it and succeeds.
 |---|---|---|---|---|
 | I-01 | GitHub | Source control, deploy trigger | Required | **Verified** (21 Nov 2026) — host authorisation for Vercel/Render still pending |
 | I-02 | MongoDB Atlas | Primary database | Required | **Configured** — not verified |
-| I-03 | Vercel | Frontend hosting | Required | **Configured** (22 Nov 2026) — live at `chosenschool.vercel.app`; rewrite to Render works; headers and robots fixed in code, not yet deployed. See ROADMAP S14 |
-| I-04 | Render | API hosting | Required | **Configured** (22 Nov 2026) — live at `chosen-school.onrender.com`, connected to Atlas; **`TRUST_PROXY_HOPS` measured wrong (T3 failed)**; Supabase variables needed before S13 deploys. See ROADMAP S14 |
+| I-03 | Vercel | Frontend hosting | Required | **Configured** (22 Nov 2026) — live at `chosenschool.vercel.app`; rewrite works; CSP, security headers and `robots.txt` live (DEP-06, DEP-08 pass). See ROADMAP S14 |
+| I-04 | Render | API hosting | Required | **Configured** (22 Nov 2026) — live at `chosen-school.onrender.com`, connected to Atlas, running S13 with Supabase storage; `TRUST_PROXY_HOPS=4` measured (T3 passed). See ROADMAP S14 |
 | I-05 | Supabase Storage | Private admission files and public gallery images | Required | **Verified** (22 Nov 2026) — V-03 and V-04 passed; bucket size/type limits not yet set |
 | I-06 | Supabase Storage (backup project) | Off-site encrypted backups | Required | Awaiting my action — **D-12** |
 | I-07 | Local backup toolchain | `mongodump` + `age` + upload script | Required | Planned |

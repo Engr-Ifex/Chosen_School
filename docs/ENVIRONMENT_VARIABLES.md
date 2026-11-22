@@ -153,9 +153,9 @@ carries `host`, `database` and `environment`, and never a credential.
 
 ## 6. `TRUST_PROXY_HOPS` — the one value that must be measured
 
-> **Measured 22 November 2026: `2` is wrong.** Render sits behind Cloudflare, so with `2` every
-> request was counted against a rotating Cloudflare address (ROADMAP S14, T3). Try `3`, re-run T3,
-> and use `4` if requests through Vercel then show a Vercel address instead of the visitor's.
+> **Measured 22 November 2026: the production value is `4`** (T3 passed). `2` and `3` were wrong for real traffic. With `2` every
+> request was counted against a rotating Cloudflare address; with `3`, against Vercel egress addresses
+> (direct-to-Render requests were correct at `3`). Path: visitor → Vercel → Cloudflare → Render (ROADMAP S14, T3).
 
 Behind the Vercel rewrite, Express sees Vercel's address rather than the visitor's. If
 `trust proxy` is wrong:

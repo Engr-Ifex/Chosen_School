@@ -14,10 +14,12 @@ import { requireSession } from './middleware/auth.js';
 import { checkOriginAndCsrf } from './middleware/csrf.js';
 import { bySession, LIMITS, rateLimit } from './middleware/rate-limit.js';
 import { adminApplicationsRouter } from './routes/admin/applications.js';
+import { adminAnnouncementsRouter } from './routes/admin/announcements.js';
 import { adminInboxRouter } from './routes/admin/inbox.js';
 import { authRouter } from './routes/auth.js';
 import { healthRouter, type HealthProbe } from './routes/health.js';
 import { publicApplicationsRouter } from './routes/public/applications.js';
+import { publicAnnouncementsRouter } from './routes/public/announcements.js';
 import { publicInboxRouter } from './routes/public/inbox.js';
 import { publicPlacementOptionsRouter } from './routes/public/placement-options.js';
 
@@ -106,10 +108,12 @@ export function createApp(options: AppOptions): Express {
     checkOriginAndCsrf({ appOrigin, requireToken: true }),
     adminApplicationsRouter(),
     adminInboxRouter(),
+    adminAnnouncementsRouter(),
   );
   app.use('/api/v1/public', publicPlacementOptionsRouter());
   app.use('/api/v1/public', publicApplicationsRouter({ appOrigin }));
   app.use('/api/v1/public', publicInboxRouter({ appOrigin }));
+  app.use('/api/v1/public', publicAnnouncementsRouter());
 
   app.use(notFoundHandler);
   app.use(errorHandler(logger));

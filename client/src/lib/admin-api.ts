@@ -433,3 +433,105 @@ export function archiveInboxItem(kind: InboxKind, id: string, csrfToken: string)
 export function unarchiveInboxItem(kind: InboxKind, id: string, csrfToken: string) {
   return inboxMutation(kind, id, 'unarchive', csrfToken);
 }
+
+// ---------------------------------------------------------------------------
+// Announcements, events and categories — API_SPEC §4.5, §4.9
+// ---------------------------------------------------------------------------
+
+export type AnnouncementKind = 'announcement' | 'event';
+
+export interface CategoryItem {
+  id: string;
+  scope: 'announcement' | 'gallery';
+  name: string;
+  slug: string;
+  order: number;
+}
+
+export interface AdminAnnouncement {
+  id: string;
+  kind: AnnouncementKind;
+  title: string;
+  category: { id: string; name: string; slug: string } | null;
+  body: string;
+  isUrgent: boolean;
+  status: 'draft' | 'published';
+  isExpired: boolean;
+  isPublic: boolean;
+  publishedAt: string | null;
+  expiresAt: string | null;
+  event: { startDate: string; endDate: string } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** What the editor sends. `status` is never part of it: publishing is its own call. */
+export interface AnnouncementInput {
+  kind: AnnouncementKind;
+  title: string;
+  categoryId: string | null;
+  body: string;
+  isUrgent: boolean;
+  expiresAt: string | null;
+  event: { startDate: string; endDate: string } | null;
+}
+
+async function send<T>(
+  path: string,
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  csrfToken?: string,
+  body?: unknown,
+): Promise<ApiResult<T>> {
+  try {
+    const response = await fetch(`${BASE}${path}`, {
+      method,
+      headers: {
+        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (response.status === 204) return { ok: true, data: null as T };
+    return await readJson<T>(response);
+  } catch {
+    return { ok: false, status: 0, message: 'Could not reach the server.' };
+  }
+}
+
+export function fetchAnnouncements(params: { status?: string; kind?: string; page?: number }) {
+  const query = new URLSearchParams();
+  if (params.status) query.set('status', params.status);
+  if (params.kind) query.set('kind', params.kind);
+  if (params.page) query.set('page', String(params.page));
+  return send<{ data: AdminAnnouncement[]; meta: ListMeta }>(`/admin/announcements?${query.toString()}`, 'GET');
+}
+
+export const fetchAnnouncement = (id: string) =>
+  send<AdminAnnouncement>(`/admin/announcements/${encodeURIComponent(id)}`, 'GET');
+
+export const createAnnouncement = (input: AnnouncementInput, csrfToken: string) =>
+  send<AdminAnnouncement>('/admin/announcements', 'POST', csrfToken, input);
+
+export const updateAnnouncement = (id: string, input: Partial<AnnouncementInput>, csrfToken: string) =>
+  send<AdminAnnouncement>(`/admin/announcements/${encodeURIComponent(id)}`, 'PATCH', csrfToken, input);
+
+export const publishAnnouncement = (id: string, csrfToken: string) =>
+  send<AdminAnnouncement>(`/admin/announcements/${encodeURIComponent(id)}/publish`, 'POST', csrfToken);
+
+export const unpublishAnnouncement = (id: string, csrfToken: string) =>
+  send<AdminAnnouncement>(`/admin/announcements/${encodeURIComponent(id)}/unpublish`, 'POST', csrfToken);
+
+export const deleteAnnouncement = (id: string, csrfToken: string) =>
+  send<null>(`/admin/announcements/${encodeURIComponent(id)}`, 'DELETE', csrfToken);
+
+export const fetchCategories = () =>
+  send<{ data: CategoryItem[] }>('/admin/categories?scope=announcement', 'GET');
+
+export const createCategory = (name: string, csrfToken: string) =>
+  send<CategoryItem>('/admin/categories', 'POST', csrfToken, { scope: 'announcement', name });
+
+export const renameCategory = (id: string, name: string, csrfToken: string) =>
+  send<CategoryItem>(`/admin/categories/${encodeURIComponent(id)}`, 'PATCH', csrfToken, { name });
+
+export const deleteCategory = (id: string, csrfToken: string) =>
+  send<null>(`/admin/categories/${encodeURIComponent(id)}`, 'DELETE', csrfToken);

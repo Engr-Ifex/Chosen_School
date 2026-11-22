@@ -6,8 +6,8 @@ Instructions for any AI agent working in this repository. Short by design — de
 
 ## 1. Repository state — read this first
 
-**Admissions, enquiries and visit requests exist; the rest of the product does not.** ROADMAP slices S00–S06 and
-S08–S13 are complete. S07 is blocked on accounts.
+**Admissions, enquiries, visit requests and news & events exist; the rest of the product does not.** ROADMAP slices S00–S06 and
+S08–S13 and S16 are complete. S07 is folded into S14.
 
 What exists, checked by inspection on 22 November 2026:
 
@@ -16,12 +16,13 @@ What exists, checked by inspection on 22 November 2026:
   visit-request forms (`POST /api/v1/public/enquiries`, `/visit-requests`).
 - **Admin:** single-administrator sign-in with sessions and CSRF protection; the application list,
   detail, edit (with revision history), photo streaming, trash, restore, permanent delete, and
-  single and bulk PDF export; the enquiry and visit-request inboxes (status, archive).
-- **Not yet built:** the dashboard, announcements and events, gallery, FAQs,
-  testimonials, settings and school content screens (S16–S19). Storage: production uses Supabase
+  single and bulk PDF export; the enquiry and visit-request inboxes (status, archive); news & events with categories,
+  draft/publish, expiry and WhatsApp sharing. Public `/news` page.
+- **Not yet built:** the dashboard, gallery, FAQs,
+  testimonials, settings and school content screens (S17–S19). Storage: production uses Supabase
   (S13, verified against the real buckets 22 November 2026); development uses the local driver.
   **Deployed** (22 November 2026): Vercel `chosenschool.vercel.app`, Render `chosen-school.onrender.com`,
-  running S12. S14 checks are partly done; per-IP rate limits do not yet work in production (T3).
+  running S12. S14 checks are partly done. T3 passed with `TRUST_PROXY_HOPS=4`; T1 (Safari) is still owner-run.
   **No backups exist** (ADR-036): nothing deleted can be recovered, and no structural migration may run.
 
 Toolchain, verified by inspection on 28 October 2026:
@@ -80,8 +81,8 @@ Verified on **28 October 2026**:
 | Install | `npm install` | 157 packages, 0 vulnerabilities |
 | Local database | `npm run dev:db` | Local `mongod` on `127.0.0.1:27017`, data in `server/.mongo-dev/` (ADR-035). Verified 22 November 2026 |
 | Development | `npm run dev` (client, `:5173`) · `npm run dev:server` (API) | API connects to `127.0.0.1` / `chosen_school_dev`, no remote connections. Verified 22 November 2026 |
-| Tests | `npm test` | 378 tests in 37 files — 253 pass, 125 skipped (database integration, opt-in). Re-run 22 November 2026 |
-| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | 336 pass in 30 files — re-run 22 November 2026. mongodb-memory-server downloads the pinned 6.0.14 (~510 MB) on first run, to `~/.cache/mongodb-binaries` |
+| Tests | `npm test` | 414 tests in 41 files — 272 pass, 142 skipped (database integration, opt-in). Re-run 22 November 2026 |
+| Tests (with DB) | `RUN_DB_TESTS=1 npm test --workspace server` | 365 pass in 33 files — re-run 22 November 2026. mongodb-memory-server downloads the pinned 6.0.14 (~510 MB) on first run, to `~/.cache/mongodb-binaries` |
 | Admin account | `ADMIN_EMAIL=... npm run provision-admin:dev` (local) · `provision-admin` (production `.env`) | Creates or rotates the single admin; deletes all sessions on rotation. Piped input: the **whole** of stdin is the password |
 | Seed | `npm run seed:dev` (local) · `seed` (production `.env`, refuses) | 20 synthetic applications |
 | Storage check | `npm run verify-storage` | Live V-03 / V-04 against the buckets in `server/.env`; uploads, reads and deletes a 1×1 synthetic image. **Passed 22 November 2026** |

@@ -363,6 +363,12 @@ AND (expiresAt is null OR expiresAt > now)
 **Indexes:** `{ status: 1, kind: 1, publishedAt: -1 }`,
 `{ status: 1, kind: 1, 'event.startDate': 1 }`, `{ expiresAt: 1 }`.
 
+**As built (S16, 22 November 2026):** `body` is at most 20,000 characters **after** sanitising
+(`server/src/lib/sanitize.ts`), and is never stored unsanitised. Event dates are calendar days stored
+as UTC midnight. An event leaves the public list once its `endDate` is before today in school time
+(UTC+1). "Expired" is computed (published and `expiresAt` has passed), not stored. Deletion is a hard
+delete with an audit entry: there is no Trash for announcements (Q11), and no backups (ADR-036).
+
 **Open:** whether events carry a time of day. The PRD specifies start and end dates; the design
 flags date/time handling as unresolved (Q12). Only dates are modelled until that is settled.
 
@@ -632,8 +638,9 @@ child's record.
 | `meta` | Object | no | Small, non-sensitive detail (e.g. counts) |
 
 **Actions:** `auth.login.success`, `auth.login.failure`, `auth.logout`,
-`auth.password.changed`, `application.permanently_deleted`, `gallery.image_unpublished`,
-`settings.updated`.
+`auth.password.changed`, `application.permanently_deleted`, `announcement.published`,
+`announcement.unpublished`, `announcement.deleted` (S16), `gallery.image_unpublished`,
+`settings.updated`. Announcement entries record the id, plus `urgent` or `kind`/`wasPublished`, never the text.
 
 **Indexes:** `{ at: -1 }`, `{ action: 1, at: -1 }`.
 

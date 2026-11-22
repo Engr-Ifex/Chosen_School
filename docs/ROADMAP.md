@@ -70,8 +70,9 @@ Every slice states the same eleven things:
 | S19 | School information content | S18 | No |
 | S20 | Accessibility, responsive, Stage 1 gate | S14, **S15**, S16–S19 | Yes |
 
-**Progress (22 Nov 2026):** S00–S06 and S08–S13 complete. **S07 blocked** on Vercel and Render
-accounts (now deployed; its checks are folded into S14). **S14 in progress**: deployed, T3 failed, owner actions listed under S14. **S15 deferred** (ADR-036). Next build slice: S16.
+**Progress (22 Nov 2026):** S00–S06, S08–S13 and S16 complete. **S07** checks are folded into S14.
+**S14 in progress**: deployed; T3 passed at `TRUST_PROXY_HOPS=4`; T1 (Safari) is owner-run.
+**S15 deferred** (ADR-036). Next build slice: S17 (gallery), which needs **D-13** decided first.
 
 ---
 
@@ -738,7 +739,7 @@ the client bundle hash matched a local build. Checked from outside, with no acco
 | SPA deep links (`/contact`, `/admin/login`, …) | `200` |
 | **DEP-06** — headers on the site | **Failed, fixed in code:** Vercel sent only HSTS. `client/vercel.json` now sends a CSP plus `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`. `vite preview` applies the same headers, and under them the built site was walked locally: home, admissions (class list), contact submit, sign-in, list, bulk PDF, inboxes. **No CSP violations** |
 | **DEP-08** — `robots.txt` | **Failed, fixed in code:** it returned the app's HTML. `client/public/robots.txt` now disallows `/admin` and `/api/` |
-| **T3** — client IP behind the proxy | **Failed.** Six failed sign-ins through Vercel were counted against **six different Cloudflare addresses** (162.158.x, 104.22.x, 172.71.x), so the per-IP limit never triggered. A direct request to Render also resolved to Cloudflare. Forged `X-Forwarded-For` values were ignored (not spoofable at this depth). Cause: Render sits behind Cloudflare, so `TRUST_PROXY_HOPS=2` stops one hop short. **Effect: per-IP rate limits on login and on the public forms do not work in production.** Parents are not blocked by each other; rather, nobody is throttled |
+| **T3** — client IP behind the proxy | **Failed at `2` and `3`; passed at `4`** (see below). At `2`: Six failed sign-ins through Vercel were counted against **six different Cloudflare addresses** (162.158.x, 104.22.x, 172.71.x), so the per-IP limit never triggered. A direct request to Render also resolved to Cloudflare. Forged `X-Forwarded-For` values were ignored (not spoofable at this depth). Cause: Render sits behind Cloudflare, so `TRUST_PROXY_HOPS=2` stops one hop short. **Effect: per-IP rate limits on login and on the public forms do not work in production.** Parents are not blocked by each other; rather, nobody is throttled |
 | T1 — cookie in Safari / iOS | Not run: needs the owner's real sign-in |
 | T2 — cold start | Not measured: needs 20 minutes idle. Warm responses took 2.5–3.8 s |
 | T5 — Atlas behaviour | Connection works (health `ok`); the wrong-password and outage cases were not run |
@@ -756,6 +757,26 @@ the client bundle hash matched a local build. Checked from outside, with no acco
    Vercel and Render would close that; it is recorded as a follow-up, not done.
 3. T1: sign in at `chosenschool.vercel.app` in desktop Safari and on an iPhone, and confirm the
    steps in TEST_PLAN §7.
+
+**T3 — PASSED with `TRUST_PROXY_HOPS=4` (22 Nov 2026).** Through Vercel, the 5th failed sign-in
+returned `429` with `Retry-After: 621`. The counter for the visitor's real ISP address (102.88.x)
+reached 8: one direct request from the `3` run, six through Vercel, and one with a forged
+`X-Forwarded-For`, which was counted against the real address, not the forged one. Per-IP limits
+on login and on the public forms now work for real traffic. The direct-to-Render limitation below
+still applies.
+
+**T3 re-run with `TRUST_PROXY_HOPS=3` (22 Nov 2026).** The six failed sign-ins through Vercel were
+counted against two **Vercel egress addresses** (63.183.x, 63.184.x), so the limit still did not
+trigger. A direct request to Render was counted against the visitor's real ISP address
+(102.88.x), and a forged `X-Forwarded-For` was ignored. So the Vercel route has one more hop than
+the direct route: **the value for real traffic is `4`**. Owner to set `4`, then T3 is run a third
+time; expected result: the 6th attempt through Vercel gets `429` and the key is the visitor's
+address. **Known limitation at `4`:** a request sent straight to Render, bypassing Vercel, can put a
+forged address in the position the server trusts and so dodge the per-IP limit. Closing that needs
+Vercel to prove itself to Render (a shared secret header). That is recorded as a follow-up.
+
+Also confirmed live after the redeploy: the CSP and other headers on the site (DEP-06), and
+`robots.txt` (DEP-08). **Both pass.**
 
 **Render build failure, fixed 22 Nov 2026.** Redeploying `ee4eda8` failed at `tsc`: `@types/multer`
 (S08) and `@types/pdfkit` (S11) were devDependencies, which Render does not install. The local build
@@ -783,6 +804,7 @@ streams it (S08), but no UI shows it. To fix in a later slice.
 **DoD** — Drill completed, timed, and written down.
 
 ### S16 — Announcements and events
+**Status:** Complete — 22 November 2026
 **Outcome** — The administrator publishes news and events; the public sees only published, unexpired content.
 **Covers** — FR-026 to FR-029.
 **Depends on** — S06.
@@ -795,6 +817,50 @@ streams it (S08), but no UI shows it. To fix in a later slice.
 **Verify** — API-P03, API-P04, API-A19 to A22, E2E-09, E2E-10.
 **Risks / rollback** — Stored XSS via the body. Allowlist sanitiser and a CSP.
 **DoD** — Publish, view publicly, let it expire, confirm it disappears.
+
+**Completion note (22 Nov 2026).** Built:
+- The `announcements` model (ADR-022): one collection, with a `kind` discriminator and the
+  event-dates validator.
+- The `categories` collection (ADR-024).
+- Public `GET /public/announcements` and `/public/events`, with the single visibility rule in
+  `publicVisibilityFilter`.
+- Admin create/edit/publish/unpublish/delete, and category CRUD.
+- A public **News & Events** page with accessible tabs.
+- Admin list, editor and categories screens.
+- **Share on WhatsApp** (FR-029): a `wa.me` link with prepared text. The admin picks the recipients
+  and sends; nothing is sent automatically.
+
+**The DoD was performed against the running app** (local database, synthetic content):
+- A category was added. An announcement was written in the editor (bold via the toolbar), marked
+  urgent, given that category and an expiry three minutes ahead, then saved and published.
+- `/news` showed it with the Urgent label and category. The bold was stored and served as
+  `<strong>` (the sanitiser normalises the browser's `<b>`).
+- An event dated 4 December appeared under Upcoming events.
+- At the expiry minute, `GET /public/announcements` returned `[]` and the page showed its empty
+  state, while the event stayed.
+- The admin list kept the item, marked **Expired**, with no share button.
+- The event's WhatsApp link carried the title, date, plain-text body and the `/news` link.
+- No console errors. No horizontal scroll at 375 px on `/news`, the admin list or the editor.
+
+**Verify:** API-P03, API-P04, API-A19 to A22, and the new API-A39 to A42
+(`routes/announcements.test.ts`, 17 tests, database); the sanitiser on its own
+(`lib/sanitize.test.ts`, 10); the News page and the WhatsApp text (`pages/News.test.tsx`, 7).
+E2E-09 and E2E-10 were covered at API level and by the DoD run.
+
+**Decisions made inside the spec:**
+- **New dependency: `sanitize-html`** (and `@types/sanitize-html`, as a production dependency per
+  AGENTS.md §5). The roadmap asks for an allowlist sanitiser. A hand-written HTML sanitiser is
+  exactly how stored XSS gets in, and the existing stack has no HTML parser.
+- **Event dates only, no time of day.** D-05 / Q12 is still open; the date-only interim model in
+  DATA_MODEL §7 is what was built.
+- **Delete is permanent**, behind a confirmation that names the item. There is no Trash for
+  announcements (Q11), and no backups (ADR-036).
+- **Categories start empty.** FR-027 says the school supplies the list.
+- **The editor is a small `contentEditable` with a toolbar** offering exactly what the sanitiser
+  keeps (DESIGN §6.7: a simple editor, not a rich-text suite). Pasting brings plain text only.
+
+**Not done:** a "recent announcements" block on the home page and on the admin dashboard; neither
+page exists in that form yet.
 
 ### S17 — Gallery
 **Outcome** — Approved photographs and YouTube links appear publicly; unpublished ones do not.

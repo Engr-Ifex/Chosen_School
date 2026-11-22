@@ -4,8 +4,12 @@ import { Container } from './components/ui/Container';
 import { SessionGate } from './components/admin/SessionGate';
 import Admissions from './pages/Admissions';
 import Contact from './pages/Contact';
+import News from './pages/News';
 import AdminApplicationDetail from './pages/admin/AdminApplicationDetail';
 import AdminApplications from './pages/admin/AdminApplications';
+import AdminAnnouncementEditor from './pages/admin/AdminAnnouncementEditor';
+import AdminAnnouncements from './pages/admin/AdminAnnouncements';
+import AdminCategories from './pages/admin/AdminCategories';
 import AdminInbox from './pages/admin/AdminInbox';
 import AdminInboxDetail from './pages/admin/AdminInboxDetail';
 import AdminLogin from './pages/admin/AdminLogin';
@@ -52,6 +56,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/admissions" element={<Admissions />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/news" element={<News />} />
         </Route>
 
         {/* Admin: sign-in is public, everything else sits behind the gate. */}
@@ -60,6 +65,10 @@ export default function App() {
           <Route path="/admin/applications" element={<AdminApplications />} />
           <Route path="/admin/applications/:id" element={<AdminApplicationDetail />} />
           <Route path="/admin/trash" element={<AdminTrash />} />
+          <Route path="/admin/news" element={<AdminAnnouncements />} />
+          <Route path="/admin/news/new" element={<AdminAnnouncementEditor key="new" />} />
+          <Route path="/admin/news/:id" element={<AdminAnnouncementEditor />} />
+          <Route path="/admin/categories" element={<AdminCategories />} />
           <Route path="/admin/enquiries" element={<AdminInbox key="enquiries" kind="enquiries" />} />
           <Route path="/admin/enquiries/:id" element={<AdminInboxDetail key="enquiries" kind="enquiries" />} />
           <Route path="/admin/visit-requests" element={<AdminInbox key="visit-requests" kind="visit-requests" />} />

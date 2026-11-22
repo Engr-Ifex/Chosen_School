@@ -209,3 +209,34 @@ export function submitEnquiry(body: unknown): Promise<FormResult> {
 export function submitVisitRequest(body: unknown): Promise<FormResult> {
   return submitForm('/public/visit-requests', body, 'visit request');
 }
+
+// ---------------------------------------------------------------------------
+// News & Events — API_SPEC §2.4
+// ---------------------------------------------------------------------------
+
+export interface PublicItem {
+  id: string;
+  kind: 'announcement' | 'event';
+  title: string;
+  category: { id: string; name: string; slug: string } | null;
+  /** Server-sanitised HTML (allowlist: p, h2, h3, strong, em, lists, links). */
+  body: string;
+  isUrgent: boolean;
+  publishedAt: string | null;
+  expiresAt: string | null;
+  event: { startDate: string; endDate: string } | null;
+}
+
+export async function fetchPublicItems(
+  kind: 'announcements' | 'events',
+  page = 1,
+): Promise<{ data: PublicItem[]; total: number; totalPages: number } | null> {
+  try {
+    const response = await request(`/public/${kind}?page=${page}`, { method: 'GET' });
+    if (!response.ok) return null;
+    const body = (await response.json()) as { data: PublicItem[]; meta: { total: number; totalPages: number } };
+    return { data: body.data, total: body.meta.total, totalPages: body.meta.totalPages };
+  } catch {
+    return null;
+  }
+}

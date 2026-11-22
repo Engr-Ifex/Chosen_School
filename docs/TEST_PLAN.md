@@ -138,6 +138,10 @@ Each test runs against an in-memory MongoDB with the real Express app.
 | API-A36 | `PATCH` status change | Persisted, `statusUpdatedAt` set, filterable by status; repeating the same status changes nothing |
 | API-A37 | Archive, then list, then unarchive | Leaves the active list, appears under `archived=true`, document still exists; archived records cannot change status or be archived twice (`409`) |
 | API-A38 | `DELETE /admin/enquiries/:id` | `404` — no delete route exists (Q11) |
+| API-A39 | Announcement body with `<script>`, an `on*` attribute and a `javascript:` link | Stored body contains none of them; text kept; links limited to http(s)/mailto/tel |
+| API-A40 | Publish / list without a session, and publish without the CSRF token | `401`, `401`, `403` |
+| API-A41 | `PATCH` sets `status`, or changes `kind` to `event` without dates | `422` both; body re-sanitised on update |
+| API-A42 | Delete a category that an item uses | `409` naming the usage count; unused category deletes with `204` |
 
 **Pass condition:** every row passes. Rows A01–A06, A16–A18 and A23 are release-blocking
 individually — each corresponds to a privacy or integrity failure, not a cosmetic one.
@@ -413,7 +417,7 @@ that works is not the same as a system that is safe to use.
 | FR-014–FR-016 authentication | API-A01–A05, T1, §5 |
 | FR-017–FR-022 application admin | API-A06–A18, DB-07–DB-10, S-01–S-06 |
 | FR-023–FR-025 enquiries and visits | API-P13, API-P18–P20, API-A33–A38, E2E-15 |
-| FR-026–FR-029 announcements and events | API-P03/P04, API-A19–A22, E2E-09/10 |
+| FR-026–FR-029 announcements and events | API-P03/P04, API-A19–A22, API-A39–A42, E2E-09/10 |
 | FR-030–FR-031 gallery | API-P05, API-A24, F-01–F-14, E2E-11 |
 | FR-032–FR-033 testimonials | API-P06/P12, API-A23, E2E-12 |
 | FR-034–FR-035 contact and settings | API-A28, E2E-01 |
